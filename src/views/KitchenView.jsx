@@ -1,40 +1,49 @@
+import { useMemo } from "react";
 import { Clock, Zap, Flame } from "lucide-react";
 import { Card, Pill } from "../components/ui.jsx";
 import { KITCHEN_STATES } from "../data/defaults.js";
 import { minutesSince } from "../lib/currency.js";
+import { useMenuIndex } from "../lib/menuIndex.js";
 
 // Kitchen display system.
 // Rush orders appear at the TOP of the queue with a red badge and pulsing border.
 // Cards are sorted by: rush-first, then oldest-order-first (longest waiting).
 
 export default function KitchenView({ tables, parcels, menuItems, onCycleKitchen, onSetPriority, currentUser }) {
+  const idx = useMenuIndex(menuItems);
   const next = (s) => KITCHEN_STATES[Math.min(KITCHEN_STATES.indexOf(s) + 1, KITCHEN_STATES.length - 1)];
 
-  const active = tables
-    .filter((t) => t.items.length > 0 && t.kitchenStatus !== "Served")
-    .sort((a, b) => {
-      // Rush first
-      const ap = a.priority === "Rush" ? 1 : 0;
-      const bp = b.priority === "Rush" ? 1 : 0;
-      if (ap !== bp) return bp - ap;
-      // Then oldest-first (New before Cooking before Ready — within same priority)
-      const ak = KITCHEN_STATES.indexOf(a.kitchenStatus);
-      const bk = KITCHEN_STATES.indexOf(b.kitchenStatus);
-      if (ak !== bk) return ak - bk;
-      // Then earliest startedAt
-      const at = a.startedAt ? new Date(a.startedAt).getTime() : 0;
-      const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0;
-      return at - bt;
-    });
+  const active = useMemo(() =>
+    tables
+      .filter((t) => t.items.length > 0 && t.kitchenStatus !== "Served")
+      .sort((a, b) => {
+        // Rush first
+        const ap = a.priority === "Rush" ? 1 : 0;
+        const bp = b.priority === "Rush" ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+        // Then oldest-first (New before Cooking before Ready — within same priority)
+        const ak = KITCHEN_STATES.indexOf(a.kitchenStatus);
+        const bk = KITCHEN_STATES.indexOf(b.kitchenStatus);
+        if (ak !== bk) return ak - bk;
+        // Then earliest startedAt
+        const at = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+        const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+        return at - bt;
+      }),
+    [tables]
+  );
 
-  const activeParcels = parcels
-    .filter((p) => p.status === "Preparing" || p.status === "Ready")
-    .sort((a, b) => {
-      const ai = a.priority === "Rush" ? 1 : 0;
-      const bi = b.priority === "Rush" ? 1 : 0;
-      if (ai !== bi) return bi - ai;
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    });
+  const activeParcels = useMemo(() =>
+    parcels
+      .filter((p) => p.status === "Preparing" || p.status === "Ready")
+      .sort((a, b) => {
+        const ai = a.priority === "Rush" ? 1 : 0;
+        const bi = b.priority === "Rush" ? 1 : 0;
+        if (ai !== bi) return bi - ai;
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      }),
+    [parcels]
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -84,7 +93,7 @@ export default function KitchenView({ tables, parcels, menuItems, onCycleKitchen
 
               <ul className="text-sm text-stone-400 list-disc list-inside">
                 {t.items.map((it) => {
-                  const mi = menuItems.find((m) => m.id === it.menuItemId);
+                  const mi = idx.get(it.menuItemId);
                   return <li key={it.menuItemId}>{mi?.name} ×{it.qty}</li>;
                 })}
               </ul>
@@ -127,7 +136,7 @@ export default function KitchenView({ tables, parcels, menuItems, onCycleKitchen
               </div>
               <ul className="text-sm text-stone-400 list-disc list-inside">
                 {p.items.map((it) => {
-                  const mi = menuItems.find((m) => m.id === it.menuItemId);
+                  const mi = idx.get(it.menuItemId);
                   return <li key={it.menuItemId}>{mi?.name} ×{it.qty}</li>;
                 })}
               </ul>
