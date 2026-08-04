@@ -98,6 +98,204 @@ export function setTablePriority(state, tableId, priority) {
   };
 }
 
+export function transferTable(state, fromTableId, toTableId) {
+  const fromTable = state.tables.find((t) => t.id === fromTableId);
+  if (!fromTable) return state;
+
+  return {
+    ...state,
+    tables: state.tables.map((t) => {
+      if (t.id === fromTableId) {
+        return {
+          ...t,
+          status: "available",
+          items: [],
+          customerName: "",
+          startedAt: null,
+          kitchenStatus: "New",
+          priority: "Normal",
+          priorityAt: null,
+        };
+      }
+      if (t.id === toTableId) {
+        return {
+          ...t,
+          status: fromTable.items.length > 0 ? "preparing" : t.status,
+          items: [...fromTable.items],
+          customerName: fromTable.customerName || t.customerName,
+          startedAt: fromTable.startedAt || new Date().toISOString(),
+          kitchenStatus: fromTable.kitchenStatus || "New",
+          priority: fromTable.priority || "Normal",
+          priorityAt: fromTable.priorityAt || null,
+        };
+      }
+      return t;
+    }),
+  };
+}
+
+export function mergeTables(state, sourceTableId, targetTableId) {
+  const sourceTable = state.tables.find((t) => t.id === sourceTableId);
+  const targetTable = state.tables.find((t) => t.id === targetTableId);
+  if (!sourceTable || !targetTable) return state;
+
+  // Combine items by menuItemId
+  const mergedItems = [...targetTable.items];
+  sourceTable.items.forEach((sItem) => {
+    const existingIdx = mergedItems.findIndex((it) => it.menuItemId === sItem.menuItemId);
+    if (existingIdx >= 0) {
+      mergedItems[existingIdx] = {
+        ...mergedItems[existingIdx],
+        qty: mergedItems[existingIdx].qty + sItem.qty,
+      };
+    } else {
+      mergedItems.push({ ...sItem });
+    }
+  });
+
+  return {
+    ...state,
+    tables: state.tables.map((t) => {
+      if (t.id === sourceTableId) {
+        return {
+          ...t,
+          status: "available",
+          items: [],
+          customerName: "",
+          startedAt: null,
+          kitchenStatus: "New",
+          priority: "Normal",
+          priorityAt: null,
+        };
+      }
+      if (t.id === targetTableId) {
+        return {
+          ...t,
+          status: "preparing",
+          items: mergedItems,
+          customerName: targetTable.customerName || sourceTable.customerName,
+          startedAt: targetTable.startedAt || sourceTable.startedAt || new Date().toISOString(),
+          kitchenStatus: targetTable.kitchenStatus || "New",
+          priority: sourceTable.priority === "Rush" || targetTable.priority === "Rush" ? "Rush" : "Normal",
+        };
+      }
+      return t;
+    }),
+  };
+}
+
+export function splitTable(state, sourceTableId, targetTableId, itemsToMove = []) {
+  const sourceTable = state.tables.find((t) => t.id === sourceTableId);
+  const targetTable = state.tables.find((t) => t.id === targetTableId);
+  if (!sourceTable || !targetTable || !itemsToMove.length) return state;
+
+  const remainingSourceItems = [];
+  const itemsForTarget = [...targetTable.items];
+
+  sourceTable.items.forEach((sItem) => {
+    const moveInfo = itemsToMove.find((m) => m.menuItemId === sItem.menuItemId);
+    const moveQty = moveInfo ? Math.min(sItem.qty, moveInfo.qty) : 0;
+    const stayQty = sItem.qty - moveQty;
+
+    if (stayQty > 0) {
+      remainingSourceItems.push({ menuItemId: sItem.menuItemId, qty: stayQty });
+    }
+
+    if (moveQty > 0) {
+      const existingTIdx = itemsForTarget.findIndex((it) => it.menuItemId === sItem.menuItemId);
+      if (existingTIdx >= 0) {
+        itemsForTarget[existingTIdx] = {
+          ...itemsForTarget[existingTIdx],
+          qty: itemsForTarget[existingTIdx].qty + moveQty,
+        };
+      } else {
+        itemsForTarget.push({ menuItemId: sItem.menuItemId, qty: moveQty });
+      }
+    }
+  });
+
+  return {
+    ...state,
+    tables: state.tables.map((t) => {
+      if (t.id === sourceTableId) {
+        return {
+          ...t,
+          items: remainingSourceItems,
+          status: remainingSourceItems.length === 0 ? "available" : t.status,
+          startedAt: remainingSourceItems.length === 0 ? null : t.startedAt,
+          customerName: remainingSourceItems.length === 0 ? "" : t.customerName,
+        };
+      }
+      if (t.id === targetTableId) {
+        return {
+          ...t,
+          items: itemsForTarget,
+          status: "preparing",
+          startedAt: targetTable.startedAt || new Date().toISOString(),
+          customerName: targetTable.customerName || sourceTable.customerName,
+        };
+      }
+      return t;
+    }),
+  };
+}
+
+export function reserveTable(state, tableId, customerName = "", capacity = null) {
+  return {
+    ...state,
+    tables: state.tables.map((t) => (t.id === tableId ? {
+      ...t,
+      status: "reserved",
+      customerName: customerName || t.customerName || "Reserved",
+      capacity: capacity ? Number(capacity) : t.capacity,
+    } : t)),
+  };
+}
+
+export function setTableCleaning(state, tableId) {
+  return {
+    ...state,
+    tables: state.tables.map((t) => {
+      if (t.id === tableId) {
+        if (t.status === "cleaning") {
+          return {
+            ...t,
+            status: "available",
+            items: [],
+            customerName: "",
+            startedAt: null,
+            kitchenStatus: "New",
+            priority: "Normal",
+          };
+        }
+        return {
+          ...t,
+          status: "cleaning",
+        };
+      }
+      return t;
+    }),
+  };
+}
+
+export function duplicateTableOrder(state, sourceTableId, targetTableId) {
+  const sourceTable = state.tables.find((t) => t.id === sourceTableId);
+  if (!sourceTable || !sourceTable.items.length) return state;
+
+  return {
+    ...state,
+    tables: state.tables.map((t) => (t.id === targetTableId ? {
+      ...t,
+      items: sourceTable.items.map((i) => ({ ...i })),
+      customerName: sourceTable.customerName || t.customerName,
+      status: "preparing",
+      startedAt: new Date().toISOString(),
+      kitchenStatus: "New",
+      priority: sourceTable.priority || "Normal",
+    } : t)),
+  };
+}
+
 // --- Parcels --------------------------------------------------------------
 
 export function createParcel(state, parcel) {

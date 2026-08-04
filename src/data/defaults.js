@@ -19,11 +19,16 @@ export const ROLE_LABELS = {
 };
 
 export const TABLE_STATUS = {
-  available: { bg: "bg-emerald-600", label: "Available", tone: "emerald" },
-  preparing: { bg: "bg-amber-600", label: "Preparing", tone: "amber" },
-  serving: { bg: "bg-sky-600", label: "Serving", tone: "sky" },
-  payment_pending: { bg: "bg-rose-600", label: "Payment Pending", tone: "rose" },
-  closed: { bg: "bg-stone-600", label: "Closed", tone: "stone" },
+  available: { bg: "bg-emerald-500", text: "text-emerald-400", border: "border-emerald-500/30", badgeBg: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", label: "Available", tone: "emerald" },
+  ordering: { bg: "bg-amber-500", text: "text-amber-400", border: "border-amber-500/30", badgeBg: "bg-amber-500/15 text-amber-400 border-amber-500/30", label: "Ordering", tone: "amber" },
+  preparing: { bg: "bg-sky-500", text: "text-sky-400", border: "border-sky-500/30", badgeBg: "bg-sky-500/15 text-sky-400 border-sky-500/30", label: "Preparing", tone: "sky" },
+  serving: { bg: "bg-sky-500", text: "text-sky-400", border: "border-sky-500/30", badgeBg: "bg-sky-500/15 text-sky-400 border-sky-500/30", label: "Preparing", tone: "sky" },
+  ready: { bg: "bg-purple-500", text: "text-purple-400", border: "border-purple-500/30", badgeBg: "bg-purple-500/15 text-purple-400 border-purple-500/30", label: "Ready", tone: "purple" },
+  billing: { bg: "bg-rose-500", text: "text-rose-400", border: "border-rose-500/30", badgeBg: "bg-rose-500/15 text-rose-400 border-rose-500/30", label: "Billing", tone: "rose" },
+  payment_pending: { bg: "bg-rose-500", text: "text-rose-400", border: "border-rose-500/30", badgeBg: "bg-rose-500/15 text-rose-400 border-rose-500/30", label: "Billing", tone: "rose" },
+  reserved: { bg: "bg-yellow-500", text: "text-yellow-400", border: "border-yellow-500/30", badgeBg: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30", label: "Reserved", tone: "yellow" },
+  cleaning: { bg: "bg-stone-500", text: "text-stone-400", border: "border-stone-500/30", badgeBg: "bg-stone-500/15 text-stone-400 border-stone-500/30", label: "Cleaning", tone: "stone" },
+  closed: { bg: "bg-stone-600", text: "text-stone-400", border: "border-stone-600/30", badgeBg: "bg-stone-600/15 text-stone-400 border-stone-600/30", label: "Closed", tone: "stone" },
 };
 
 export const KITCHEN_STATES = ["New", "Cooking", "Ready", "Served"];
@@ -39,6 +44,8 @@ export function defaultTables(count = 7) {
     customerName: "",
     startedAt: null,
     kitchenStatus: "New",
+    capacity: (i % 3 === 0) ? 2 : (i % 3 === 1) ? 4 : 6,
+    qrEnabled: true,
   }));
 }
 

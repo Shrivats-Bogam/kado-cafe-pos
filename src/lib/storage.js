@@ -32,7 +32,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 let supabase = null;
 let useSupabase = false;
 let lastFetched = ""; // remember remote json so trivial saves can skip the round-trip
-const writeQueue = Promise.resolve();
+let writeQueue = Promise.resolve();
 
 if (
   supabaseUrl &&
