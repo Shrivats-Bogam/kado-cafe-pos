@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Coffee, LayoutDashboard, ChefHat, Package, Menu as MenuIcon,
-  Users, Sparkles, BarChart3, Settings, LogOut, Calculator as CalculatorIcon,
+  Users, Sparkles, BarChart3, Settings, LogOut, Calculator as CalculatorIcon, ShieldCheck
 } from "lucide-react";
 
 import LoginScreen from "../components/LoginScreen.jsx";
@@ -15,6 +15,7 @@ import ParcelView from "../views/ParcelView.jsx";
 import MenuManageView from "../views/MenuManageView.jsx";
 import CustomersView from "../views/CustomersView.jsx";
 import ReportsView from "../views/ReportsView.jsx";
+import EmployeesView from "../views/EmployeesView.jsx";
 import AIInsightsView from "../views/AIInsightsView.jsx";
 import SettingsPanel from "../views/SettingsPanel.jsx";
 import TableQRModal from "../views/TableQRModal.jsx";
@@ -35,6 +36,7 @@ const TABS = [
   { id: "customers", label: "Customers", icon: Users },
   { id: "insights", label: "Insights", icon: Sparkles },
   { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "employees", label: "Employees", icon: ShieldCheck },
 ];
 
 export default function StaffApp() {
@@ -166,8 +168,21 @@ export default function StaffApp() {
   if (!currentUser) {
     return (
       <>
-        <LoginScreen users={state.users} onLogin={(u) => {
+        <LoginScreen users={state.users || []} onLogin={(u) => {
+          // Check if employee account is disabled
+          const emp = (state.employees || []).find(e => e.pin === u.pin || e.name === u.name);
+          if (emp && emp.status === "disabled") {
+            toaster.push("Account Disabled. Please contact the Owner.", "rush");
+            return;
+          }
+
           setCurrentUser(u);
+          // Record login activity
+          update((s) => actions.recordActivityLog(s, {
+            employeeName: u.name,
+            action: "Logged into POS",
+            module: "Auth"
+          }));
         }} />
         <Toaster toaster={toaster} />
       </>
@@ -360,6 +375,13 @@ export default function StaffApp() {
           )}
           {tab === "reports" && (
             <ReportsView state={state} />
+          )}
+          {tab === "employees" && (
+            <EmployeesView
+              state={state}
+              dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
+              currentUser={currentUser}
+            />
           )}
         </div>
       </div>

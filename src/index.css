@@ -23,5 +23,17 @@ body {
 /* Hide everything except the print receipt when window.print() is called */
 @media print {
   .no-print { display: none !important; }
-  body { background: #fff !important; }
+  body { 
+    background: #fff !important; 
+    color: #000 !important;
+    font-family: monospace !important;
+    font-size: 12px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
 }

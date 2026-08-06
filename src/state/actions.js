@@ -698,3 +698,213 @@ export function adjustStock(state, adjustmentData) {
     inventoryLogs: [newLog, ...(state.inventoryLogs || [])]
   };
 }
+
+// ---------- EMPLOYEE & RBAC ACTIONS ----------
+
+export function addEmployee(state, employeeData) {
+  const employees = state.employees || [];
+  
+  // Enforce PIN uniqueness if provided
+  if (employeeData.pin && employees.some(e => e.pin === employeeData.pin)) {
+    throw new Error("PIN is already assigned to another employee.");
+  }
+
+  const id = makeId("emp");
+  const count = employees.length + 101;
+  const newEmp = {
+    id,
+    employeeId: `EMP-${count}`,
+    name: employeeData.name,
+    phone: employeeData.phone || "",
+    email: employeeData.email || "",
+    role: employeeData.role || "Staff",
+    department: employeeData.department || "Operations",
+    pin: employeeData.pin || "0000",
+    status: "active",
+    joinedAt: new Date().toISOString().slice(0, 10),
+  };
+
+  // Sync with state.users so login works out of the box
+  const nextUsers = [
+    ...(state.users || []).filter(u => u.id !== id),
+    { id, name: newEmp.name, pin: newEmp.pin, role: newEmp.role }
+  ];
+
+  return {
+    ...state,
+    employees: [newEmp, ...employees],
+    users: nextUsers
+  };
+}
+
+export function editEmployee(state, employeeData) {
+  const employees = state.employees || [];
+  
+  if (employeeData.pin) {
+    const existing = employees.find(e => e.pin === employeeData.pin && e.id !== employeeData.id);
+    if (existing) {
+      throw new Error("PIN is already assigned to another employee.");
+    }
+  }
+
+  const updatedEmployees = employees.map(e => {
+    if (e.id === employeeData.id) {
+      return { ...e, ...employeeData };
+    }
+    return e;
+  });
+
+  // Sync state.users
+  const nextUsers = (state.users || []).map(u => {
+    if (u.id === employeeData.id || u.name === employeeData.name) {
+      return {
+        ...u,
+        name: employeeData.name || u.name,
+        pin: employeeData.pin || u.pin,
+        role: employeeData.role || u.role
+      };
+    }
+    return u;
+  });
+
+  return {
+    ...state,
+    employees: updatedEmployees,
+    users: nextUsers
+  };
+}
+
+export function toggleEmployeeStatus(state, employeeId) {
+  const employees = (state.employees || []).map(e => {
+    if (e.id === employeeId) {
+      const nextStatus = e.status === "active" ? "disabled" : "active";
+      return { ...e, status: nextStatus };
+    }
+    return e;
+  });
+
+  return {
+    ...state,
+    employees
+  };
+}
+
+export function updateRolePermissions(state, role, permissions) {
+  return {
+    ...state,
+    rolePermissions: {
+      ...(state.rolePermissions || {}),
+      [role]: permissions
+    }
+  };
+}
+
+export function clockInShift(state, employeeId) {
+  const shifts = state.shifts || [];
+  const emp = (state.employees || []).find(e => e.id === employeeId);
+  const newShift = {
+    id: makeId("sh"),
+    employeeId,
+    employeeName: emp ? emp.name : "Employee",
+    role: emp ? emp.role : "Staff",
+    startTime: new Date().toISOString(),
+    endTime: null,
+    status: "On Shift",
+    breakMins: 0,
+  };
+
+  return {
+    ...state,
+    shifts: [newShift, ...shifts]
+  };
+}
+
+export function clockOutShift(state, shiftId) {
+  const shifts = (state.shifts || []).map(s => {
+    if (s.id === shiftId) {
+      return {
+        ...s,
+        endTime: new Date().toISOString(),
+        status: "Off Duty"
+      };
+    }
+    return s;
+  });
+
+  return {
+    ...state,
+    shifts
+  };
+}
+
+export function recordActivityLog(state, { employeeName, action, module }) {
+  const newLog = {
+    id: makeId("log"),
+    employeeName: employeeName || "System User",
+    action,
+    module: module || "System",
+    timestamp: new Date().toISOString()
+  };
+
+  return {
+    ...state,
+    activityLogs: [newLog, ...(state.activityLogs || []).slice(0, 100)] // Keep max 100 logs
+  };
+}
+
+// ---------- QR & CUSTOMER SELF-SERVICE ACTIONS ----------
+
+export function requestTableAssistance(state, tableId, type = "waiter") {
+  const table = (state.tables || []).find(t => t.id === tableId);
+  const tableNumber = table ? table.number : tableId;
+  const requests = state.assistanceRequests || [];
+
+  // Prevent duplicate un-cleared requests of the same type for the same table
+  if (requests.some(r => r.tableId === tableId && r.type === type && !r.cleared)) {
+    return state;
+  }
+
+  const newRequest = {
+    id: makeId("req"),
+    tableId,
+    tableNumber,
+    type, // "waiter" or "bill"
+    message: type === "bill" ? `Table ${tableNumber} requested billing.` : `Table ${tableNumber} requests assistance.`,
+    timestamp: new Date().toISOString(),
+    cleared: false,
+  };
+
+  return {
+    ...state,
+    assistanceRequests: [newRequest, ...requests]
+  };
+}
+
+export function clearTableAssistance(state, requestId) {
+  const requests = (state.assistanceRequests || []).map(r => {
+    if (r.id === requestId) return { ...r, cleared: true };
+    return r;
+  });
+
+  return {
+    ...state,
+    assistanceRequests: requests
+  };
+}
+
+export function submitCustomerFeedback(state, feedback) {
+  const newFeedback = {
+    id: makeId("fb"),
+    tableId: feedback.tableId,
+    foodRating: feedback.foodRating || 5,
+    serviceRating: feedback.serviceRating || 5,
+    ambienceRating: feedback.ambienceRating || 5,
+    comment: feedback.comment || "",
+    timestamp: new Date().toISOString(),
+  };
+
+  return {
+    ...state,
+    customerFeedback: [newFeedback, ...(state.customerFeedback || [])]
+  };
+}

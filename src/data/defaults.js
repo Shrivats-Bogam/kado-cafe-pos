@@ -3,11 +3,12 @@
 import { defaultMenu } from "./menu.js";
 
 export const ROLE_TABS = {
-  Owner: ["dashboard", "tables", "kitchen", "parcel", "menu", "customers", "insights", "reports", "settings"],
-  Manager: ["dashboard", "tables", "kitchen", "parcel", "menu", "customers", "insights", "reports"],
+  Owner: ["dashboard", "tables", "kitchen", "parcel", "menu", "customers", "insights", "reports", "employees", "settings"],
+  Manager: ["dashboard", "tables", "kitchen", "parcel", "menu", "customers", "insights", "reports", "employees"],
   Staff: ["dashboard", "tables", "kitchen", "parcel"],
   Kitchen: ["kitchen"],
   Waiter: ["tables", "kitchen", "parcel"],
+  Cashier: ["dashboard", "tables", "kitchen", "parcel"],
 };
 
 export const ROLE_LABELS = {
@@ -144,6 +145,70 @@ export function defaultCustomers() {
   ];
 }
 
+export function defaultEmployees() {
+  return [
+    {
+      id: "emp_1",
+      employeeId: "EMP-101",
+      name: "Alex Morgan",
+      phone: "9876543210",
+      email: "alex@kadocafe.com",
+      role: "Owner",
+      department: "Management",
+      pin: "1234",
+      status: "active",
+      joinedAt: "2024-01-15",
+    },
+    {
+      id: "emp_2",
+      employeeId: "EMP-102",
+      name: "Sarah Jenkins",
+      phone: "9812345678",
+      email: "sarah@kadocafe.com",
+      role: "Manager",
+      department: "Operations",
+      pin: "0000",
+      status: "active",
+      joinedAt: "2024-02-01",
+    },
+    {
+      id: "emp_3",
+      employeeId: "EMP-103",
+      name: "David Kim",
+      phone: "9765432109",
+      email: "david@kadocafe.com",
+      role: "Kitchen",
+      department: "Kitchen",
+      pin: "5555",
+      status: "active",
+      joinedAt: "2024-03-10",
+    },
+    {
+      id: "emp_4",
+      employeeId: "EMP-104",
+      name: "Emily Watson",
+      phone: "9654321098",
+      email: "emily@kadocafe.com",
+      role: "Waiter",
+      department: "Service",
+      pin: "1111",
+      status: "active",
+      joinedAt: "2024-04-05",
+    }
+  ];
+}
+
+export function defaultRolePermissions() {
+  return {
+    Owner: { tables: true, parcel: true, kitchen: true, menu: true, customers: true, insights: true, reports: true, inventory: true, employees: true, settings: true },
+    Manager: { tables: true, parcel: true, kitchen: true, menu: true, customers: true, insights: true, reports: true, inventory: true, employees: true, settings: false },
+    Cashier: { tables: true, parcel: true, kitchen: true, menu: false, customers: true, insights: false, reports: false, inventory: false, employees: false, settings: false },
+    Staff: { tables: true, parcel: true, kitchen: true, menu: false, customers: false, insights: false, reports: false, inventory: false, employees: false, settings: false },
+    Waiter: { tables: true, parcel: true, kitchen: true, menu: false, customers: false, insights: false, reports: false, inventory: false, employees: false, settings: false },
+    Kitchen: { tables: false, parcel: false, kitchen: true, menu: false, customers: false, insights: false, reports: false, inventory: false, employees: false, settings: false },
+  };
+}
+
 export function defaultState() {
   return {
     cafeName: "Kado Cafe",
@@ -153,6 +218,14 @@ export function defaultState() {
     orderHistory: [],
     customers: defaultCustomers(),
     users: defaultUsers(),
+    employees: defaultEmployees(),
+    rolePermissions: defaultRolePermissions(),
+    shifts: [],
+    activityLogs: [
+      { id: "log_1", employeeName: "Alex Morgan", action: "Logged in", module: "Auth", timestamp: new Date().toISOString() }
+    ],
+    assistanceRequests: [],
+    customerFeedback: [],
     expenses: [],
     invites: [],
     inventory: defaultInventory(),

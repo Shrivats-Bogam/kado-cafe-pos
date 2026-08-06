@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import StaffApp from "./components/StaffApp.jsx";
 import CustomerOrderPage from "./views/CustomerOrderPage.jsx";
+import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
+import { OfflineBanner } from "./components/OfflineBanner.jsx";
 
 // The app has two top-level modes:
 //   /                    → Staff facing POS (login, dashboard, tables, kitchen, etc.)
 //   /?table=<id>         → Customer-facing scan-to-order page (opened via QR on the table)
-//
-// Deciding via URL keeps things simple, has no router dependency, and works on
-// a plain device with no build polyfills required.
 
 export default function App() {
   const tableParam = useMemo(
@@ -15,6 +14,10 @@ export default function App() {
     []
   );
 
-  if (tableParam) return <CustomerOrderPage tableId={tableParam} />;
-  return <StaffApp />;
+  return (
+    <ErrorBoundary>
+      <OfflineBanner />
+      {tableParam ? <CustomerOrderPage tableId={tableParam} /> : <StaffApp />}
+    </ErrorBoundary>
+  );
 }

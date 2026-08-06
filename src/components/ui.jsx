@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 // Reusable UI atoms used everywhere. Pure presentation components.
 
 export function Card({ children, className = "" }) {
@@ -53,11 +55,20 @@ export function IconButton({ onClick, children, className = "", title, ariaLabel
 }
 
 export function PrimaryButton({ onClick, children, className = "", disabled, type = "button", ariaLabel }) {
+  const [isClicked, setIsClicked] = useState(false);
+
+  const handleClick = (e) => {
+    if (isClicked) return;
+    setIsClicked(true);
+    setTimeout(() => setIsClicked(false), 500); // 500ms debounce protection
+    if (onClick) onClick(e);
+  };
+
   return (
     <button
       type={type}
-      onClick={onClick}
-      disabled={disabled}
+      onClick={handleClick}
+      disabled={disabled || isClicked}
       aria-label={ariaLabel}
       className={`min-h-[44px] rounded-xl px-4 py-2.5 font-bold text-xs bg-amber-500 text-stone-950 hover:bg-amber-400 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 shadow-md ${className}`}
     >
