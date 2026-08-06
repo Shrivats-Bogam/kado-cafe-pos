@@ -299,6 +299,13 @@ export function duplicateTableOrder(state, sourceTableId, targetTableId) {
 // --- Parcels --------------------------------------------------------------
 
 export function createParcel(state, parcel) {
+  const exists = state.parcels.some((p) => p.id === parcel.id);
+  if (exists) {
+    return {
+      ...state,
+      parcels: state.parcels.map((p) => (p.id === parcel.id ? { ...p, ...parcel } : p)),
+    };
+  }
   return { ...state, parcels: [...state.parcels, parcel] };
 }
 

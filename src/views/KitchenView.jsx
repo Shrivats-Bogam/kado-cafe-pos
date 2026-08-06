@@ -85,7 +85,12 @@ export default function KitchenView({ tables, parcels, menuItems, onCycleKitchen
               <ul className="text-sm text-stone-400 list-disc list-inside">
                 {t.items.map((it) => {
                   const mi = menuItems.find((m) => m.id === it.menuItemId);
-                  return <li key={it.menuItemId}>{mi?.name} ×{it.qty}</li>;
+                  return (
+                    <li key={it.menuItemId}>
+                      <span>{mi?.name} ×{it.qty}</span>
+                      {it.notes && <span className="block text-xs text-amber-400 font-medium italic pl-4">Note: {it.notes}</span>}
+                    </li>
+                  );
                 })}
               </ul>
 
@@ -128,9 +133,15 @@ export default function KitchenView({ tables, parcels, menuItems, onCycleKitchen
               <ul className="text-sm text-stone-400 list-disc list-inside">
                 {p.items.map((it) => {
                   const mi = menuItems.find((m) => m.id === it.menuItemId);
-                  return <li key={it.menuItemId}>{mi?.name} ×{it.qty}</li>;
+                  return (
+                    <li key={it.menuItemId}>
+                      <span>{mi?.name} ×{it.qty}</span>
+                      {it.notes && <span className="block text-xs text-amber-400 font-medium italic pl-4">Note: {it.notes}</span>}
+                    </li>
+                  );
                 })}
               </ul>
+              {p.notes && <p className="text-xs text-stone-400 italic bg-stone-900/60 p-2 rounded-lg border border-stone-800">Note: {p.notes}</p>}
               {p.status === "Preparing" && (
                 <button
                   onClick={() => onCycleKitchen("parcel", p.id, "Ready")}
