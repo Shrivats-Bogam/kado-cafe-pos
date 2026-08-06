@@ -13,12 +13,9 @@ export default function LoginScreen({ users, onLogin }) {
   const [error, setError] = useState("");
 
   const submit = (fullPin) => {
-    console.log("STEP 1: submit() in LoginScreen. fullPin:", fullPin, "pickedUser:", pickedUser);
     if (pickedUser && String(fullPin) === String(pickedUser.pin)) {
-      console.log("STEP 2: PIN match, calling onLogin() with user:", pickedUser);
       onLogin(pickedUser);
     } else {
-      console.log("STEP 2 FAILED: Wrong PIN. fullPin:", fullPin, "pickedUser.pin:", pickedUser?.pin);
       setError("Wrong PIN");
       setPin("");
     }
