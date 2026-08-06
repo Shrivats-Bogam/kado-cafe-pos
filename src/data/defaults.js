@@ -58,6 +58,92 @@ export function defaultUsers() {
   ];
 }
 
+export function defaultInventory() {
+  return [
+    { id: "inv_1", name: "Milk", category: "Dairy", unit: "litre", currentStock: 20, minStock: 5, costPrice: 60, supplier: "Amul Dairy", notes: "Fresh whole milk" },
+    { id: "inv_2", name: "Tea Leaves", category: "Beverages", unit: "g", currentStock: 800, minStock: 200, costPrice: 0.5, supplier: "Assam Tea Traders", notes: "Premium CTC tea" },
+    { id: "inv_3", name: "Sugar", category: "Pantry", unit: "g", currentStock: 2500, minStock: 500, costPrice: 0.04, supplier: "Local Grocer", notes: "Fine white sugar" },
+    { id: "inv_4", name: "Espresso Coffee Beans", category: "Beverages", unit: "kg", currentStock: 4, minStock: 1, costPrice: 850, supplier: "Blue Tokai Roasters", notes: "Dark roast blend" },
+    { id: "inv_5", name: "Burger Buns", category: "Bakery", unit: "pcs", currentStock: 30, minStock: 10, costPrice: 12, supplier: "Fresh Bake Co", notes: "Sesame buns" },
+    { id: "inv_6", name: "Veggie Patty", category: "Frozen", unit: "pcs", currentStock: 25, minStock: 8, costPrice: 25, supplier: "McCain Foods", notes: "Crispy veg patties" },
+    { id: "inv_7", name: "Cheese Slices", category: "Dairy", unit: "pcs", currentStock: 40, minStock: 10, costPrice: 8, supplier: "Amul Dairy", notes: "Processed cheese slices" },
+    { id: "inv_8", name: "Sauce & Mayo", category: "Condiments", unit: "ml", currentStock: 1500, minStock: 300, costPrice: 0.15, supplier: "Heinz India", notes: "Burger sauce mix" },
+  ];
+}
+
+export function defaultRecipes() {
+  return {
+    "m1": [ // Masala Tea
+      { ingredientId: "inv_1", qty: 150 }, // 150 ml Milk
+      { ingredientId: "inv_2", qty: 8 },   // 8 g Tea
+      { ingredientId: "inv_3", qty: 10 },  // 10 g Sugar
+    ],
+    "m2": [ // Espresso / Coffee
+      { ingredientId: "inv_4", qty: 0.018 }, // 18 g Coffee beans (0.018 kg)
+    ],
+    "m3": [ // Veg Burger
+      { ingredientId: "inv_5", qty: 1 },  // 1 Bun
+      { ingredientId: "inv_6", qty: 1 },  // 1 Patty
+      { ingredientId: "inv_7", qty: 1 },  // 1 Cheese slice
+      { ingredientId: "inv_8", qty: 15 }, // 15 ml Sauce
+    ]
+  };
+}
+
+export function defaultCustomers() {
+  const today = new Date();
+  const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().slice(5, 10); // MM-DD
+  const nextWeekStr = new Date(today.getTime() + 3 * 86400000).toISOString().slice(5, 10);
+
+  return [
+    {
+      id: "c1",
+      name: "Rahul Sharma",
+      phone: "9876543210",
+      email: "rahul.s@example.com",
+      birthday: `${today.getFullYear()}-${tomorrowStr}`, // Birthday tomorrow!
+      anniversary: "2020-11-20",
+      address: "Bandra West, Mumbai",
+      membership: "Platinum",
+      points: 520,
+      lifetimeSpend: 54200,
+      totalOrders: 28,
+      lastVisit: new Date().toISOString(),
+      notes: "VIP Guest. Likes extra shot espresso in cappuccino."
+    },
+    {
+      id: "c2",
+      name: "Priya Patel",
+      phone: "9812345678",
+      email: "priya.p@example.com",
+      birthday: `${today.getFullYear()}-${nextWeekStr}`,
+      anniversary: "",
+      address: "Andheri East, Mumbai",
+      membership: "Gold",
+      points: 210,
+      lifetimeSpend: 21500,
+      totalOrders: 14,
+      lastVisit: new Date(Date.now() - 2 * 86400000).toISOString(),
+      notes: "Prefers oat milk for beverages."
+    },
+    {
+      id: "c3",
+      name: "Amit Verma",
+      phone: "9988776655",
+      email: "amit.v@example.com",
+      birthday: "1995-04-12",
+      anniversary: "2022-02-14",
+      address: "Juhu, Mumbai",
+      membership: "Silver",
+      points: 85,
+      lifetimeSpend: 4200,
+      totalOrders: 5,
+      lastVisit: new Date(Date.now() - 5 * 86400000).toISOString(),
+      notes: "Orders takeaway on weekends."
+    }
+  ];
+}
+
 export function defaultState() {
   return {
     cafeName: "Kado Cafe",
@@ -65,9 +151,12 @@ export function defaultState() {
     menuItems: defaultMenu(),
     parcels: [],
     orderHistory: [],
-    customers: [],
+    customers: defaultCustomers(),
     users: defaultUsers(),
     expenses: [],
     invites: [],
+    inventory: defaultInventory(),
+    recipes: defaultRecipes(),
+    inventoryLogs: [],
   };
 }

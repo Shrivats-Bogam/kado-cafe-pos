@@ -13,18 +13,29 @@ import { indexById } from "./menuIndex.js";
  * @param {number} pointsToRedeem — points being redeemed this order
  * @returns {{ customers: Array, customerId: string|null }}
  */
+export function calculateMembershipTier(lifetimeSpend = 0) {
+  if (lifetimeSpend >= 50000) return "Platinum";
+  if (lifetimeSpend >= 10000) return "Gold";
+  return "Silver";
+}
+
 export function applyLoyalty(customers, phone, amountSpent, pointsToRedeem = 0) {
   if (!phone || phone.length < 6) {
     return { customers, customerId: null };
   }
 
-  const earned = Math.floor((amountSpent || 0) / 20);
+  const spent = Math.max(0, amountSpent || 0);
+  const earned = Math.floor(spent / 20); // 1 point per ₹20 spent
   const existing = customers.find((c) => c.phone === phone);
 
   if (existing) {
+    const newLifetimeSpend = (existing.lifetimeSpend || 0) + spent;
     const updated = {
       ...existing,
       totalOrders: (existing.totalOrders || 0) + 1,
+      totalVisits: (existing.totalVisits || existing.totalOrders || 0) + 1,
+      lifetimeSpend: newLifetimeSpend,
+      membership: calculateMembershipTier(newLifetimeSpend),
       points: Math.max(0, (existing.points || 0) - (pointsToRedeem || 0)) + earned,
       lastVisit: new Date().toISOString(),
     };
@@ -39,7 +50,13 @@ export function applyLoyalty(customers, phone, amountSpent, pointsToRedeem = 0) 
     name: phone,
     phone,
     birthday: "",
+    anniversary: "",
+    address: "",
+    notes: "",
     totalOrders: 1,
+    totalVisits: 1,
+    lifetimeSpend: spent,
+    membership: calculateMembershipTier(spent),
     points: earned,
     lastVisit: new Date().toISOString(),
   };

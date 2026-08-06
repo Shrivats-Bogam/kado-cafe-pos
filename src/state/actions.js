@@ -19,17 +19,64 @@ import { makeId } from "../lib/id.js";
 // --- Tables ---------------------------------------------------------------
 
 export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
-  const wasEmpty = state.tables.find((t) => t.id === tableId)?.items?.length === 0;
-  const nextTables = state.tables.map((t) => (t.id === tableId ? {
-    ...t,
-    items,
-    customerName,
-    status: items.length === 0 ? "available" : (t.status === "available" ? "preparing" : t.status),
-    startedAt: t.startedAt || (items.length > 0 ? new Date().toISOString() : null),
-    kitchenStatus: wasEmpty && items.length > 0 ? "New" : t.kitchenStatus,
-    priority: opts.priority || t.priority || "Normal",
-    priorityAt: opts.priority === "Rush" ? new Date().toISOString() : t.priorityAt,
-  } : t));
+  const nextTables = state.tables.map((t) => {
+    if (t.id !== tableId) return t;
+
+    // Calculate item quantities already sent to kitchen across previous tickets
+    const sentQtyMap = {};
+    (t.kitchenTickets || []).forEach((ticket) => {
+      (ticket.items || []).forEach((it) => {
+        sentQtyMap[it.menuItemId] = (sentQtyMap[it.menuItemId] || 0) + it.qty;
+      });
+    });
+
+    // Determine delta items (new items or quantity increases)
+    const deltaItems = [];
+    items.forEach((it) => {
+      const sentQty = sentQtyMap[it.menuItemId] || 0;
+      const diffQty = it.qty - sentQty;
+      if (diffQty > 0) {
+        deltaItems.push({
+          menuItemId: it.menuItemId,
+          qty: diffQty,
+          notes: it.notes || ""
+        });
+      }
+    });
+
+    // Create a new kitchen ticket if there are delta items
+    let updatedTickets = t.kitchenTickets ? [...t.kitchenTickets] : [];
+    if (deltaItems.length > 0) {
+      const newTicket = {
+        id: makeId("kt"),
+        tableId: t.id,
+        tableNumber: t.number,
+        customerName: customerName || t.customerName || `Table ${t.number}`,
+        items: deltaItems,
+        status: "New",
+        createdAt: new Date().toISOString(),
+        priority: opts.priority || t.priority || "Normal",
+      };
+      updatedTickets.push(newTicket);
+    } else if (items.length === 0) {
+      updatedTickets = [];
+    }
+
+    const activeTickets = updatedTickets.filter((ticket) => ticket.status !== "Served");
+    const nextKitchenStatus = activeTickets.length > 0 ? activeTickets[activeTickets.length - 1].status : "Served";
+
+    return {
+      ...t,
+      items,
+      customerName,
+      status: items.length === 0 ? "available" : (t.status === "available" ? "preparing" : t.status),
+      startedAt: t.startedAt || (items.length > 0 ? new Date().toISOString() : null),
+      kitchenTickets: updatedTickets,
+      kitchenStatus: nextKitchenStatus,
+      priority: opts.priority || t.priority || "Normal",
+      priorityAt: opts.priority === "Rush" ? new Date().toISOString() : t.priorityAt,
+    };
+  });
   return { ...state, tables: nextTables };
 }
 
@@ -53,7 +100,7 @@ export function generateBillForTable(state, tableId, items, customerName, totals
       paidAt: new Date().toISOString(),
     }],
     tables: state.tables.map((t) => (t.id === tableId ? {
-      ...t, status: "available", items: [], customerName: "", startedAt: null,
+      ...t, status: "available", items: [], kitchenTickets: [], customerName: "", startedAt: null,
       kitchenStatus: "New", priority: "Normal", priorityAt: null,
     } : t)),
   };
@@ -66,7 +113,7 @@ export function setTableStatus(state, tableId, status) {
       ...t,
       status,
       ...(status === "available" ? {
-        items: [], customerName: "", startedAt: null,
+        items: [], kitchenTickets: [], customerName: "", startedAt: null,
         kitchenStatus: "New", priority: "Normal", priorityAt: null,
       } : {}),
     } : t)),
@@ -77,11 +124,34 @@ export function cycleKitchen(state, kind, id, newStatus) {
   if (kind === "table") {
     return {
       ...state,
-      tables: state.tables.map((t) => (t.id === id ? {
-        ...t,
-        kitchenStatus: newStatus,
-        status: newStatus === "Served" ? t.status : "serving",
-      } : t)),
+      tables: state.tables.map((t) => {
+        const hasTicket = (t.kitchenTickets || []).some((ticket) => ticket.id === id);
+        if (hasTicket) {
+          const updatedTickets = t.kitchenTickets.map((ticket) => (
+            ticket.id === id ? { ...ticket, status: newStatus } : ticket
+          ));
+          const activeTickets = updatedTickets.filter((ticket) => ticket.status !== "Served");
+          const nextKitchenStatus = activeTickets.length > 0 ? activeTickets[activeTickets.length - 1].status : "Served";
+
+          return {
+            ...t,
+            kitchenTickets: updatedTickets,
+            kitchenStatus: nextKitchenStatus,
+            status: nextKitchenStatus === "Served" ? t.status : "serving",
+          };
+        } else if (t.id === id) {
+          const updatedTickets = (t.kitchenTickets || []).map((ticket) => (
+            ticket.status !== "Served" ? { ...ticket, status: newStatus } : ticket
+          ));
+          return {
+            ...t,
+            kitchenTickets: updatedTickets,
+            kitchenStatus: newStatus,
+            status: newStatus === "Served" ? t.status : "serving",
+          };
+        }
+        return t;
+      }),
     };
   }
   return { ...state, parcels: state.parcels.map((p) => (p.id === id ? { ...p, status: newStatus } : p)) };
@@ -352,10 +422,23 @@ export function deleteMenuItem(state, id) {
   return { ...state, menuItems: state.menuItems.filter((m) => m.id !== id) };
 }
 
-// --- Customers ------------------------------------------------------------
-
 export function addCustomer(state, customer) {
+  // Prevent duplicate customers by phone
+  const existing = (state.customers || []).find(c => c.phone === customer.phone);
+  if (existing) {
+    return {
+      ...state,
+      customers: state.customers.map(c => c.id === existing.id ? { ...c, ...customer } : c)
+    };
+  }
   return { ...state, customers: [...state.customers, customer] };
+}
+
+export function editCustomer(state, id, patch) {
+  return {
+    ...state,
+    customers: (state.customers || []).map((c) => (c.id === id ? { ...c, ...patch } : c))
+  };
 }
 
 export function deleteCustomer(state, id) {
@@ -370,4 +453,248 @@ export function addUser(state, user) {
 
 export function removeUser(state, id) {
   return { ...state, users: state.users.filter((u) => u.id !== id) };
+}
+
+// Helper: Deduct stock automatically based on item recipes
+export function deductStockForOrderItems(inventory = [], recipes = {}, inventoryLogs = [], items = [], orderId = "") {
+  let nextInventory = [...(inventory || [])];
+  let nextLogs = [...(inventoryLogs || [])];
+
+  items.forEach((item) => {
+    const menuItemId = item.menuItemId;
+    const itemQty = item.qty || 1;
+    const recipe = recipes ? recipes[menuItemId] : null;
+
+    if (recipe && Array.isArray(recipe)) {
+      recipe.forEach((req) => {
+        const invIdx = nextInventory.findIndex((i) => i.id === req.ingredientId);
+        if (invIdx >= 0) {
+          const invItem = nextInventory[invIdx];
+          const totalDeduction = req.qty * itemQty;
+          const updatedStock = Math.max(0, Math.round((invItem.currentStock - totalDeduction) * 1000) / 1000);
+          
+          nextInventory[invIdx] = {
+            ...invItem,
+            currentStock: updatedStock
+          };
+
+          nextLogs.unshift({
+            id: makeId("log"),
+            ingredientId: invItem.id,
+            ingredientName: invItem.name,
+            type: "Sale",
+            qty: -totalDeduction,
+            unit: invItem.unit,
+            reason: `Order #${String(orderId).slice(-6)}`,
+            supplier: invItem.supplier || "-",
+            cost: Math.round(totalDeduction * (invItem.costPrice || 0) * 100) / 100,
+            date: new Date().toISOString(),
+          });
+        }
+      });
+    }
+  });
+
+  return { inventory: nextInventory, inventoryLogs: nextLogs };
+}
+
+export function createBill(state, billData) {
+  const { customers, customerId } = applyLoyalty(
+    state.customers, 
+    billData.phone, 
+    billData.grandTotal || 0, 
+    billData.pointsRedeemed || 0
+  );
+
+  const billId = billData.id || makeId("o");
+  const newBill = {
+    id: billId,
+    source: billData.source || "POS Order",
+    customerName: billData.customerName || "Walk-in",
+    customerId,
+    items: billData.items || [],
+    subtotal: billData.subtotal || 0,
+    discount: billData.discount || 0,
+    discountReason: billData.discountReason || "",
+    gst: billData.gst || 0,
+    roundOff: billData.roundOff || 0,
+    grandTotal: billData.grandTotal || 0,
+    pointsRedeemed: billData.pointsRedeemed || 0,
+    paymentMode: billData.paymentMode || "Cash",
+    status: billData.status || "Paid",
+    paidAt: billData.paidAt || new Date().toISOString(),
+  };
+
+  // Deduct inventory if bill status is Paid
+  let nextInventory = state.inventory || [];
+  let nextLogs = state.inventoryLogs || [];
+
+  if (newBill.status === "Paid") {
+    const deducted = deductStockForOrderItems(nextInventory, state.recipes, nextLogs, newBill.items, billId);
+    nextInventory = deducted.inventory;
+    nextLogs = deducted.inventoryLogs;
+  }
+
+  return {
+    ...state,
+    customers,
+    inventory: nextInventory,
+    inventoryLogs: nextLogs,
+    orderHistory: [newBill, ...(state.orderHistory || [])]
+  };
+}
+
+export function updateBillStatus(state, billId, newStatus) {
+  let nextInventory = state.inventory || [];
+  let nextLogs = state.inventoryLogs || [];
+
+  const nextHistory = (state.orderHistory || []).map((b) => {
+    if (b.id === billId) {
+      // If transition from Pending -> Paid, deduct stock
+      if (b.status !== "Paid" && newStatus === "Paid") {
+        const deducted = deductStockForOrderItems(nextInventory, state.recipes, nextLogs, b.items || [], billId);
+        nextInventory = deducted.inventory;
+        nextLogs = deducted.inventoryLogs;
+      }
+      return { ...b, status: newStatus };
+    }
+    return b;
+  });
+
+  return {
+    ...state,
+    inventory: nextInventory,
+    inventoryLogs: nextLogs,
+    orderHistory: nextHistory
+  };
+}
+
+// --- Inventory & Recipes --------------------------------------------------
+
+export function addInventoryItem(state, item) {
+  const newItem = {
+    id: item.id || makeId("inv"),
+    name: item.name || "New Product",
+    category: item.category || "General",
+    unit: item.unit || "pcs",
+    currentStock: Number(item.currentStock) || 0,
+    minStock: Number(item.minStock) || 0,
+    costPrice: Number(item.costPrice) || 0,
+    supplier: item.supplier || "",
+    notes: item.notes || "",
+  };
+  return {
+    ...state,
+    inventory: [...(state.inventory || []), newItem]
+  };
+}
+
+export function editInventoryItem(state, id, patch) {
+  return {
+    ...state,
+    inventory: (state.inventory || []).map((i) => (i.id === id ? { ...i, ...patch } : i))
+  };
+}
+
+export function deleteInventoryItem(state, id) {
+  return {
+    ...state,
+    inventory: (state.inventory || []).filter((i) => i.id !== id)
+  };
+}
+
+export function saveRecipe(state, menuItemId, ingredients = []) {
+  return {
+    ...state,
+    recipes: {
+      ...(state.recipes || {}),
+      [menuItemId]: ingredients
+    }
+  };
+}
+
+export function addPurchaseEntry(state, purchaseData) {
+  const { ingredientId, qty, cost, supplier, invoiceNo, date, notes } = purchaseData;
+  const qtyNum = Number(qty) || 0;
+  const costNum = Number(cost) || 0;
+
+  let ingredientName = "Item";
+  let unit = "pcs";
+
+  const nextInventory = (state.inventory || []).map((item) => {
+    if (item.id === ingredientId) {
+      ingredientName = item.name;
+      unit = item.unit;
+      return {
+        ...item,
+        currentStock: Math.round((item.currentStock + qtyNum) * 1000) / 1000,
+        supplier: supplier || item.supplier
+      };
+    }
+    return item;
+  });
+
+  const newLog = {
+    id: makeId("log"),
+    ingredientId,
+    ingredientName,
+    type: "Purchase",
+    qty: qtyNum,
+    unit,
+    reason: invoiceNo ? `Invoice #${invoiceNo}` : "Purchase Entry",
+    supplier: supplier || "-",
+    cost: costNum,
+    notes: notes || "",
+    date: date || new Date().toISOString(),
+  };
+
+  return {
+    ...state,
+    inventory: nextInventory,
+    inventoryLogs: [newLog, ...(state.inventoryLogs || [])]
+  };
+}
+
+export function adjustStock(state, adjustmentData) {
+  const { ingredientId, qty, type, reason, date } = adjustmentData; // type: Wastage, Damage, Staff, Adjustment
+  const qtyNum = Number(qty) || 0; // Positive quantity provided by user
+
+  let ingredientName = "Item";
+  let unit = "pcs";
+  let costPrice = 0;
+
+  const deltaQty = type === "Adjustment" ? qtyNum : -qtyNum;
+
+  const nextInventory = (state.inventory || []).map((item) => {
+    if (item.id === ingredientId) {
+      ingredientName = item.name;
+      unit = item.unit;
+      costPrice = item.costPrice || 0;
+      const newStock = type === "Adjustment" ? qtyNum : Math.max(0, item.currentStock - qtyNum);
+      return {
+        ...item,
+        currentStock: Math.round(newStock * 1000) / 1000
+      };
+    }
+    return item;
+  });
+
+  const newLog = {
+    id: makeId("log"),
+    ingredientId,
+    ingredientName,
+    type: type || "Adjustment",
+    qty: deltaQty,
+    unit,
+    reason: reason || type,
+    supplier: "-",
+    cost: Math.round(Math.abs(deltaQty) * costPrice * 100) / 100,
+    date: date || new Date().toISOString(),
+  };
+
+  return {
+    ...state,
+    inventory: nextInventory,
+    inventoryLogs: [newLog, ...(state.inventoryLogs || [])]
+  };
 }

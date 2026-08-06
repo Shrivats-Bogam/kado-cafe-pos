@@ -52,9 +52,26 @@ export default function KitchenView({
   const tickets = useMemo(() => {
     const unified = [];
     
-    // Process Tables
+    // Process Tables (supports incremental tickets)
     tables.forEach((t) => {
-      if (t.items.length > 0 && t.kitchenStatus !== "Served") {
+      if (t.kitchenTickets && t.kitchenTickets.length > 0) {
+        t.kitchenTickets.forEach((ticket, idx) => {
+          if (ticket.status !== "Served") {
+            unified.push({
+              id: ticket.id,
+              type: "table",
+              number: t.kitchenTickets.length > 1 ? `${t.number} (#${idx + 1})` : t.number,
+              customerName: t.customerName,
+              items: ticket.items,
+              status: ticket.status || "New",
+              priority: ticket.priority || t.priority || "Normal",
+              createdAt: ticket.createdAt || t.startedAt,
+              notes: null
+            });
+          }
+        });
+      } else if (t.items.length > 0 && t.kitchenStatus !== "Served") {
+        // Fallback for legacy table state without kitchenTickets array
         unified.push({
           id: t.id,
           type: "table",
@@ -64,7 +81,7 @@ export default function KitchenView({
           status: t.kitchenStatus,
           priority: t.priority,
           createdAt: t.startedAt,
-          notes: null // Tables don't have order-level notes in this schema, only items
+          notes: null
         });
       }
     });
