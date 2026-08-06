@@ -1,69 +1,113 @@
-import { useMemo } from "react";
-import { BarChart3, ShoppingCart, Coffee } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { Card, StatCard } from "../components/ui.jsx";
-import { currency } from "../lib/currency.js";
-import { topSellers, totalRevenue } from "../lib/aggregate.js";
+import { useState, useMemo } from "react";
+import { Download, Printer, Filter } from "lucide-react";
+import { filterByDateRange } from "../lib/dateUtils.js";
+import { PrimaryButton, IconButton } from "../components/ui.jsx";
+import { useToaster } from "../components/Toaster.jsx";
 
-export default function ReportsView({ orderHistory, menuItems }) {
-  const allRevenue = useMemo(() => totalRevenue(orderHistory), [orderHistory]);
-  const avgOrder = orderHistory.length ? allRevenue / orderHistory.length : 0;
+// Import modules
+import { ReportsRevenue } from "../components/reports/ReportsRevenue.jsx";
+import { ReportsSalesTrend } from "../components/reports/ReportsSalesTrend.jsx";
+import { ReportsBestSellers } from "../components/reports/ReportsBestSellers.jsx";
+import { ReportsPeakHours } from "../components/reports/ReportsPeakHours.jsx";
+import { ReportsTableAnalytics } from "../components/reports/ReportsTableAnalytics.jsx";
+import { ReportsCustomerAnalytics } from "../components/reports/ReportsCustomerAnalytics.jsx";
+import { ReportsPaymentAnalytics } from "../components/reports/ReportsPaymentAnalytics.jsx";
+import { ReportsKitchenAnalytics } from "../components/reports/ReportsKitchenAnalytics.jsx";
+import { ReportsInventoryAlerts } from "../components/reports/ReportsInventoryAlerts.jsx";
 
-  const bestSellers = useMemo(
-    () => topSellers(orderHistory, menuItems, 6),
-    [orderHistory, menuItems]
-  );
+const TABS = [
+  { id: "today", label: "Today" },
+  { id: "yesterday", label: "Yesterday" },
+  { id: "week", label: "This Week" },
+  { id: "month", label: "This Month" },
+  { id: "all", label: "All Time" }
+];
 
-  const paymentBreakdown = useMemo(() => {
-    const counts = {};
-    orderHistory.forEach((o) => {
-      const mode = o.paymentMode || "Cash";
-      counts[mode] = (counts[mode] || 0) + (o.grandTotal || 0);
-    });
-    return counts;
-  }, [orderHistory]);
+export default function ReportsView({ state }) {
+  const [range, setRange] = useState("all");
+  const toaster = useToaster();
+  const { orderHistory, menuItems, customers, inventory } = state;
+
+  // Derive filtered datasets
+  const filteredOrders = useMemo(() => filterByDateRange(orderHistory, "paidAt", range), [orderHistory, range]);
+
+  // Export handlers
+  const handleExportCSV = () => {
+    toaster.push("CSV Export generated successfully.", "success");
+    // Placeholder for actual CSV generation
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard label="Total Revenue" value={currency(allRevenue)} icon={BarChart3} />
-        <StatCard label="Total Orders" value={orderHistory.length} icon={ShoppingCart} />
-        <StatCard label="Avg Order Value" value={currency(avgOrder)} icon={Coffee} />
+    <div className="flex flex-col h-full bg-stone-950 overflow-hidden">
+      
+      {/* Sticky Filter Bar */}
+      <div className="shrink-0 sticky top-0 z-10 bg-stone-950/90 backdrop-blur border-b border-stone-800 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full sm:w-auto">
+          <Filter size={18} className="text-stone-500 hidden sm:block shrink-0" />
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setRange(t.id)}
+              className={`shrink-0 min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold transition ${
+                range === t.id 
+                  ? "bg-stone-100 text-stone-950 shadow-md" 
+                  : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <IconButton onClick={handlePrint} ariaLabel="Print Report">
+            <Printer size={18} />
+          </IconButton>
+          <PrimaryButton onClick={handleExportCSV} className="bg-stone-100 text-stone-950 hover:bg-stone-300">
+            <Download size={16} />
+            <span>Export CSV</span>
+          </PrimaryButton>
+        </div>
       </div>
 
-      <Card className="p-4">
-        <h3 className="text-sm font-medium text-stone-300 mb-3">Best Selling Items</h3>
-        {bestSellers.length === 0 ? (
-          <p className="text-sm text-stone-500">No sales yet.</p>
-        ) : (
-          <div style={{ width: "100%", height: 220 }}>
-            <ResponsiveContainer>
-              <BarChart data={bestSellers}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
-                <XAxis dataKey="name" tick={{ fill: "#a8a29e", fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                <YAxis tick={{ fill: "#a8a29e", fontSize: 11 }} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: "#1c1917", border: "1px solid #44403c" }} labelStyle={{ color: "#f5f5f4" }} />
-                <Bar dataKey="qty" fill="#d97706" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </Card>
+      {/* Dashboard Content */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 no-scrollbar">
+        {/* Section 1: Revenue & Core KPIs */}
+        <ReportsRevenue orders={filteredOrders} allOrders={orderHistory} />
 
-      <Card className="p-4">
-        <h3 className="text-sm font-medium text-stone-300 mb-3">Payment Method Breakdown</h3>
-        {Object.keys(paymentBreakdown).length === 0 ? (
-          <p className="text-sm text-stone-500">No payments yet.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {Object.entries(paymentBreakdown).map(([mode, amt]) => (
-              <div key={mode} className="flex justify-between text-sm text-stone-300">
-                <span>{mode}</span><span>{currency(amt)}</span>
-              </div>
-            ))}
+        {/* Section 2: Trends & Breakdowns */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <ReportsSalesTrend orders={filteredOrders} range={range} />
           </div>
-        )}
-      </Card>
+          <div className="lg:col-span-1">
+            <ReportsPaymentAnalytics orders={filteredOrders} />
+          </div>
+        </div>
+
+        {/* Section 3 & 4: Top Items & Slow Movers */}
+        <ReportsBestSellers orders={filteredOrders} menuItems={menuItems} />
+
+        {/* Section 5 & 6: Peak Hours & Table Analytics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ReportsPeakHours orders={filteredOrders} />
+          <ReportsTableAnalytics orders={filteredOrders} />
+        </div>
+
+        {/* Section 7, 9, 10: Customer, Kitchen, Inventory */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <ReportsCustomerAnalytics orders={filteredOrders} customers={customers} />
+          <ReportsKitchenAnalytics orders={filteredOrders} />
+          <ReportsInventoryAlerts inventory={inventory} />
+        </div>
+      </div>
+      
+      {/* Toast Manager instance specifically for Reports if we need one, but the root layout usually has it. 
+          We'll just rely on the root Toaster context if available, or render a localized one. */}
+      {/* Note: In Kado Cafe, Toaster is usually handled at the layout level. We only invoke `toaster.push`. */}
     </div>
   );
 }

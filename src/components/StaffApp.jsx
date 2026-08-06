@@ -359,7 +359,7 @@ export default function StaffApp() {
             <AIInsightsView orderHistory={state.orderHistory} menuItems={state.menuItems} />
           )}
           {tab === "reports" && (
-            <ReportsView orderHistory={state.orderHistory} menuItems={state.menuItems} />
+            <ReportsView state={state} />
           )}
         </div>
       </div>
