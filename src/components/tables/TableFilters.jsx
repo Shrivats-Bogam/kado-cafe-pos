@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Sparkles, Zap, ChefHat, CheckCircle2 } from "lucide-react";
+import { ChevronDown, Sparkles, Zap, ChefHat, CheckCircle2, Clock } from "lucide-react";
 
 export default function TableFilters({ activeFilter = "all", setActiveFilter, counts = {} }) {
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
@@ -21,18 +21,18 @@ export default function TableFilters({ activeFilter = "all", setActiveFilter, co
     { id: "all", label: "All", count: counts.all },
     { id: "available", label: "🟢 Available", count: counts.available },
     { id: "occupied", label: "🟠 Occupied", count: counts.occupied },
-    { id: "preparing", label: "🟣 Kitchen", count: counts.preparing },
+    { id: "preparing", label: "🟠 Kitchen", count: counts.preparing },
     { id: "reserved", label: "🟡 Reserved", count: counts.reserved },
   ];
 
   const moreFilters = [
-    { id: "cleaning", label: "⚫ Cleaning Mode", icon: Sparkles, count: counts.cleaning },
-    { id: "rush", label: "⚡ Rush Orders", icon: Zap, count: counts.rush },
-    { id: "preparing", label: "🟣 Waiting Kitchen", icon: ChefHat, count: counts.preparing },
-    { id: "ready", label: "🔵 Food Ready to Serve", icon: CheckCircle2, count: counts.ready },
+    { id: "waiting", label: "🟠 Waiting Kitchen", icon: Clock, count: counts.waiting || counts.preparing },
+    { id: "ready", label: "🔵 Food Ready", icon: CheckCircle2, count: counts.ready },
+    { id: "rush", label: "🟣 Rush Priority", icon: Zap, count: counts.rush },
+    { id: "cleaning", label: "⚫ Needs Cleaning", icon: Sparkles, count: counts.cleaning },
   ];
 
-  const isMoreActive = ["cleaning", "rush", "ready"].includes(activeFilter);
+  const isMoreActive = ["waiting", "ready", "rush", "cleaning"].includes(activeFilter);
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
@@ -47,7 +47,7 @@ export default function TableFilters({ activeFilter = "all", setActiveFilter, co
           <button
             key={pill.id}
             onClick={() => setActiveFilter(pill.id)}
-            className={`px-3.5 py-1.5 rounded-full font-bold transition-all shrink-0 border flex items-center gap-1.5 cursor-pointer ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-full font-bold transition-all shrink-0 border flex items-center gap-1.5 cursor-pointer ${
               isActive
                 ? "bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-xs scale-105"
                 : "bg-stone-900 border-stone-800 text-stone-400 hover:text-stone-200 hover:border-stone-700"
@@ -71,7 +71,7 @@ export default function TableFilters({ activeFilter = "all", setActiveFilter, co
       <div ref={dropdownRef} className="relative shrink-0">
         <button
           onClick={() => setShowMoreDropdown((prev) => !prev)}
-          className={`px-3.5 py-1.5 rounded-full font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+          className={`min-h-[44px] px-3.5 py-2 rounded-full font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
             isMoreActive
               ? "bg-amber-500/20 border-amber-500/60 text-amber-300"
               : "bg-stone-900 border-stone-800 text-stone-400 hover:text-stone-200"
@@ -94,7 +94,7 @@ export default function TableFilters({ activeFilter = "all", setActiveFilter, co
                     setActiveFilter(mf.id);
                     setShowMoreDropdown(false);
                   }}
-                  className={`w-full px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                  className={`w-full min-h-[40px] px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                     isSelected
                       ? "bg-amber-500/20 text-amber-300 font-bold"
                       : "text-stone-300 hover:bg-stone-800 hover:text-stone-100"

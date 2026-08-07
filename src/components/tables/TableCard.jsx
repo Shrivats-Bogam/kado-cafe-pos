@@ -1,5 +1,5 @@
 import { useRef, useCallback } from "react";
-import { Users, Clock, ShoppingBag, ArrowRight, Zap, StickyNote } from "lucide-react";
+import { Users, Clock, ShoppingBag, ArrowRight, Zap, StickyNote, MapPin } from "lucide-react";
 import TableStatusBadge from "./TableStatusBadge.jsx";
 import { currency, orderTotal, minutesSince } from "../../lib/currency.js";
 import { TABLE_SHAPES } from "./TableModal.jsx";
@@ -12,6 +12,7 @@ export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMen
 
   const capacity = table.capacity || 4;
   const isRush = table.priority === "Rush";
+  const isOccupied = (table.items && table.items.length > 0) || table.status !== "available";
 
   const getShapeIcon = (shapeId) => {
     const found = TABLE_SHAPES.find((s) => s.id === shapeId);
@@ -19,8 +20,9 @@ export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMen
   };
 
   const shapeIcon = getShapeIcon(table.shape);
+  const areaLabel = table.area || table.type || "Indoor";
 
-  // Touch long press for mobile (500ms)
+  // Mobile long press (500ms) for action menu
   const handleTouchStart = useCallback(() => {
     isLongPressRef.current = false;
     touchTimerRef.current = setTimeout(() => {
@@ -61,66 +63,68 @@ export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMen
       }}
       tabIndex={0}
       role="button"
-      aria-label={`Table ${table.number}, status ${table.status}`}
-      className={`group relative rounded-2xl bg-stone-900 border transition-all duration-200 flex flex-col justify-between overflow-hidden cursor-pointer select-none h-full min-h-[220px] p-4.5 shadow-md hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-500/10 active:scale-[0.98] ${
+      aria-label={`${table.name || `Table ${table.number}`}, Capacity ${capacity}, Section ${areaLabel}, status ${table.status}`}
+      className={`group relative rounded-2xl bg-stone-900 border transition-all duration-200 flex flex-col justify-between overflow-hidden cursor-pointer select-none h-full min-h-[240px] p-5 shadow-md hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-500/80 ${
         isRush
-          ? "border-rose-500/80 ring-2 ring-rose-500/40"
-          : "border-stone-800 hover:border-amber-500/50"
+          ? "border-purple-500/80 ring-2 ring-purple-500/40 shadow-purple-900/20"
+          : isOccupied
+          ? "border-amber-500/40 hover:border-amber-500/80 shadow-amber-900/10"
+          : "border-stone-800 hover:border-stone-700"
       }`}
     >
-      {/* Rush Badge Overlay */}
+      {/* Rush Overlay Badge */}
       {isRush && (
-        <div className="absolute top-0 right-0 bg-rose-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-bl-xl flex items-center gap-1 shadow-xs animate-pulse z-10">
+        <div className="absolute top-0 right-0 bg-purple-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-bl-xl flex items-center gap-1 shadow-xs animate-pulse z-10">
           <Zap size={11} /> RUSH
         </div>
       )}
 
-      {/* Header: Table Number (left) & Capacity Badge (right) */}
-      <div className="flex items-center justify-between pb-3 border-b border-stone-800/80">
-        <div className="flex items-center gap-2">
-          <span className="text-xl shrink-0" title={`Shape: ${table.shape || "Square"}`}>
+      {/* Header: Table Name (large) & Section + Capacity */}
+      <div className="flex items-start justify-between pb-3 border-b border-stone-800/80">
+        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+          <span className="text-2xl shrink-0 text-amber-400" title={`Shape: ${table.shape || "Square"}`}>
             {shapeIcon}
           </span>
-          <div>
-            <h3 className="font-serif text-xl font-bold text-stone-50 group-hover:text-amber-400 transition-colors leading-none">
+          <div className="min-w-0">
+            <h3 className="font-serif text-xl font-bold text-stone-50 group-hover:text-amber-300 transition-colors leading-tight truncate">
               {table.name || `Table ${table.number}`}
             </h3>
-            {table.type && (
-              <p className="text-[10px] text-stone-400 uppercase tracking-wider font-semibold mt-0.5">{table.type}</p>
-            )}
+            <p className="text-[11px] text-stone-400 font-semibold mt-0.5 flex items-center gap-1">
+              <MapPin size={10} className="text-amber-500 shrink-0" />
+              <span className="uppercase tracking-wider truncate">{areaLabel}</span>
+            </p>
           </div>
         </div>
 
-        <span className="inline-flex items-center gap-1 text-xs font-extrabold text-stone-200 bg-stone-800 border border-stone-700 px-2.5 py-1 rounded-xl shadow-inner shrink-0">
+        <span className="inline-flex items-center gap-1 text-xs font-extrabold text-stone-200 bg-stone-800/90 border border-stone-700/80 px-2.5 py-1 rounded-xl shadow-inner shrink-0 min-h-[32px]">
           <Users size={13} className="text-amber-400" />
           {capacity}
         </span>
       </div>
 
-      {/* Main Body: Single Status Badge, Customer Name, Large Bill Total, Items & Timer */}
-      <div className="py-3 flex flex-col gap-2 my-auto">
-        {/* Single Primary Status Badge */}
-        <div className="flex items-center justify-between">
-          <TableStatusBadge status={table.status} />
+      {/* Body: Status Badge, Customer Name, Large Bill Amount & Items/Timer */}
+      <div className="py-3.5 flex flex-col gap-2.5 my-auto">
+        <div className="flex items-center justify-between gap-2">
+          <TableStatusBadge status={table.status} priority={table.priority} />
           {table.notes && (
-            <span className="text-[10px] text-stone-400 truncate max-w-[100px] flex items-center gap-1 bg-stone-800 px-2 py-0.5 rounded" title={table.notes}>
+            <span className="text-[10px] text-stone-400 truncate max-w-[110px] flex items-center gap-1 bg-stone-800 px-2 py-0.5 rounded-md border border-stone-750" title={table.notes}>
               <StickyNote size={10} className="text-amber-400 shrink-0" /> {table.notes}
             </span>
           )}
         </div>
 
-        {/* Customer Name */}
+        {/* Current Customer */}
         <p className="text-xs font-semibold text-stone-300 truncate">
           {table.customerName ? table.customerName : "Walk-in Guest"}
         </p>
 
-        {/* Large Bill Amount */}
+        {/* Current Bill Total & Items / Time */}
         {table.items && table.items.length > 0 ? (
           <div>
             <span className="text-2xl font-extrabold text-amber-400 tracking-tight block">
               {currency(grandTotal)}
             </span>
-            <p className="text-xs text-stone-400 font-medium mt-0.5 flex items-center gap-2">
+            <p className="text-xs text-stone-400 font-medium mt-1 flex items-center gap-2">
               <span className="flex items-center gap-1">
                 <ShoppingBag size={12} className="text-stone-400" />
                 {table.items.length} item{table.items.length !== 1 ? "s" : ""}
@@ -137,20 +141,20 @@ export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMen
           </div>
         ) : (
           <div className="py-1">
-            <span className="text-sm font-semibold text-stone-500 block italic">
+            <span className="text-sm font-medium text-stone-500 block italic">
               No active order
             </span>
-            <p className="text-xs text-emerald-400/90 font-medium">
-              Ready for guests
+            <p className="text-xs text-emerald-400 font-medium mt-0.5">
+              Available for seating
             </p>
           </div>
         )}
       </div>
 
-      {/* Footer Callout: Tap to Open Order */}
-      <div className="pt-2.5 border-t border-stone-800/80 flex items-center justify-between text-xs text-stone-400 font-bold group-hover:text-amber-300 transition-colors">
-        <span>Tap to Open Order</span>
-        <ArrowRight size={14} className="opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+      {/* Primary Action Footer: Tap to Open */}
+      <div className="pt-3 border-t border-stone-800/80 flex items-center justify-between text-xs font-bold text-stone-400 group-hover:text-amber-300 transition-colors min-h-[36px]">
+        <span>Tap to Open</span>
+        <ArrowRight size={15} className="opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-amber-400" />
       </div>
     </div>
   );

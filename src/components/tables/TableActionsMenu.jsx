@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
   ArrowRightLeft, Merge, Split, BookmarkCheck, QrCode,
-  ChevronRight, AlertCircle, Edit2, Trash2, Coffee
+  ChevronRight, Edit2, Trash2, Coffee
 } from "lucide-react";
-import { Modal, ModalHeader, PrimaryButton } from "../ui/index.js";
+import { Modal, ModalHeader, PrimaryButton, ConfirmDialog } from "../ui/index.js";
 import { orderTotal, currency } from "../../lib/currency.js";
 
 export default function TableActionsMenu({
@@ -26,6 +26,7 @@ export default function TableActionsMenu({
   const [capacityInput, setCapacityInput] = useState(table.capacity || 4);
   const [splitQuantities, setSplitQuantities] = useState({});
   const [feedbackMsg, setFeedbackMsg] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const otherTables = (tables || []).filter((t) => t.id !== table.id);
   const availableTables = otherTables.filter((t) => t.status === "available");
@@ -77,9 +78,9 @@ export default function TableActionsMenu({
       },
     },
     {
-      id: "edit",
+      id: "rename",
       label: "Rename / Edit Table",
-      desc: "Change table name, capacity, shape & area",
+      desc: "Change table name, capacity, area & shape",
       icon: Edit2,
       color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
       disabled: false,
@@ -144,214 +145,230 @@ export default function TableActionsMenu({
       disabled: table.items && table.items.length > 0,
       disabledReason: "Cannot delete occupied table",
       onClick: () => {
-        if (onDeleteTable) onDeleteTable(table.id);
-        onClose();
+        setShowDeleteConfirm(true);
       },
     },
   ];
 
   return (
-    <Modal onClose={onClose} className="sm:max-w-lg">
-      <ModalHeader
-        title={`Table ${table.number} Actions`}
-        onClose={onClose}
-      />
+    <>
+      <Modal onClose={onClose} className="sm:max-w-lg">
+        <ModalHeader
+          title={`${table.name || `Table ${table.number}`} Actions`}
+          onClose={onClose}
+        />
 
-      {/* Main Menu View */}
-      {activeTab === "menu" && (
-        <div className="flex flex-col gap-2 mt-4 max-h-[70vh] overflow-y-auto no-scrollbar">
-          {menuOptions.map((opt) => {
-            const Icon = opt.icon;
-            return (
-              <button
-                key={opt.id}
-                disabled={opt.disabled}
-                onClick={() => {
-                  if (opt.onClick) {
-                    opt.onClick();
-                  } else {
-                    setActiveTab(opt.id);
-                    setTargetTableId("");
-                    setFeedbackMsg("");
-                  }
-                }}
-                className={`min-h-[52px] p-3 rounded-2xl border text-left flex items-center justify-between transition-all duration-200 ${
-                  opt.disabled
-                    ? "opacity-40 bg-stone-900/50 border-stone-800/50 cursor-not-allowed"
-                    : "bg-stone-900 hover:bg-stone-800 border-stone-800 hover:border-stone-700 active:scale-[0.99] cursor-pointer"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${opt.color}`}>
-                    <Icon size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="font-semibold text-sm text-stone-100 truncate">{opt.label}</h4>
-                    <p className="text-xs text-stone-400 truncate">
-                      {opt.disabled ? opt.disabledReason : opt.desc}
-                    </p>
-                  </div>
-                </div>
-                {!opt.disabled && <ChevronRight size={18} className="text-stone-500 shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Transfer Table Form */}
-      {activeTab === "transfer" && (
-        <div className="flex flex-col gap-4 mt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-stone-200">Select Target Table</h4>
-            <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline">
-              Back to Menu
-            </button>
-          </div>
-          <p className="text-xs text-stone-400">
-            Transfer all {table.items?.length || 0} items from Table {table.number} to an available table.
-          </p>
-
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
-            {availableTables.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTargetTableId(t.id)}
-                className={`min-h-[48px] p-3 rounded-xl border font-medium text-sm flex flex-col items-center justify-center transition-all ${
-                  targetTableId === t.id
-                    ? "bg-amber-500 text-stone-950 border-amber-400 font-bold"
-                    : "bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700"
-                }`}
-              >
-                <span>T-{t.number}</span>
-                <span className="text-[10px] opacity-75">Available</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => setActiveTab("menu")}
-              className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              disabled={!targetTableId}
-              onClick={handleTransferSubmit}
-              className="min-h-[48px] flex-1"
-            >
-              Transfer Now
-            </PrimaryButton>
-          </div>
-        </div>
-      )}
-
-      {/* Merge Table Form */}
-      {activeTab === "merge" && (
-        <div className="flex flex-col gap-4 mt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-stone-200">Merge Into Table</h4>
-            <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline">
-              Back to Menu
-            </button>
-          </div>
-          <p className="text-xs text-stone-400">
-            Merge items from Table {table.number} into another occupied table order.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
-            {occupiedOtherTables.map((t) => {
-              const { grandTotal } = orderTotal(t.items || [], menuItems);
+        {/* Main Menu View */}
+        {activeTab === "menu" && (
+          <div className="flex flex-col gap-2 mt-4 max-h-[70vh] overflow-y-auto no-scrollbar">
+            {menuOptions.map((opt) => {
+              const Icon = opt.icon;
               return (
+                <button
+                  key={opt.id}
+                  disabled={opt.disabled}
+                  onClick={() => {
+                    if (opt.onClick) {
+                      opt.onClick();
+                    } else {
+                      setActiveTab(opt.id);
+                      setTargetTableId("");
+                      setFeedbackMsg("");
+                    }
+                  }}
+                  className={`min-h-[52px] p-3 rounded-2xl border text-left flex items-center justify-between transition-all duration-200 ${
+                    opt.disabled
+                      ? "opacity-40 bg-stone-900/50 border-stone-800/50 cursor-not-allowed"
+                      : "bg-stone-900 hover:bg-stone-800 border-stone-800 hover:border-stone-700 active:scale-[0.99] cursor-pointer"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${opt.color}`}>
+                      <Icon size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-sm text-stone-100 truncate">{opt.label}</h4>
+                      <p className="text-xs text-stone-400 truncate">
+                        {opt.disabled ? opt.disabledReason : opt.desc}
+                      </p>
+                    </div>
+                  </div>
+                  {!opt.disabled && <ChevronRight size={18} className="text-stone-500 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Transfer Table Form */}
+        {activeTab === "transfer" && (
+          <div className="flex flex-col gap-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-stone-200">Select Target Table</h4>
+              <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline cursor-pointer">
+                Back to Menu
+              </button>
+            </div>
+            <p className="text-xs text-stone-400">
+              Transfer all {table.items?.length || 0} items from {table.name} to an available table.
+            </p>
+
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
+              {availableTables.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setTargetTableId(t.id)}
-                  className={`min-h-[52px] p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                  className={`min-h-[48px] p-3 rounded-xl border font-medium text-sm flex flex-col items-center justify-center transition-all cursor-pointer ${
                     targetTableId === t.id
                       ? "bg-amber-500 text-stone-950 border-amber-400 font-bold"
                       : "bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700"
                   }`}
                 >
-                  <div className="flex justify-between items-center w-full">
-                    <span>Table {t.number}</span>
-                    <span className="text-xs">{t.items?.length || 0} items</span>
-                  </div>
-                  <span className="text-xs opacity-80 mt-1">{currency(grandTotal)}</span>
+                  <span>{t.name || `T-${t.number}`}</span>
+                  <span className="text-[10px] opacity-75">Available</span>
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => setActiveTab("menu")}
-              className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              disabled={!targetTableId}
-              onClick={handleMergeSubmit}
-              className="min-h-[48px] flex-1"
-            >
-              Merge Tables
-            </PrimaryButton>
-          </div>
-        </div>
-      )}
-
-      {/* Reserve Form */}
-      {activeTab === "reserve" && (
-        <div className="flex flex-col gap-4 mt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-stone-200">Reserve Table {table.number}</h4>
-            <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline">
-              Back to Menu
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div>
-              <label className="text-xs font-semibold text-stone-300 mb-1 block">Guest / Customer Name</label>
-              <input
-                type="text"
-                value={customerNameInput}
-                onChange={(e) => setCustomerNameInput(e.target.value)}
-                placeholder="e.g. Rahul Sharma"
-                className="w-full min-h-[48px] rounded-xl bg-stone-800 border border-stone-700 px-3 text-sm text-stone-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
+              ))}
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-stone-300 mb-1 block">Guest Count</label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={capacityInput}
-                onChange={(e) => setCapacityInput(e.target.value)}
-                className="w-full min-h-[48px] rounded-xl bg-stone-800 border border-stone-700 px-3 text-sm text-stone-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => setActiveTab("menu")}
+                className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+              <PrimaryButton
+                disabled={!targetTableId}
+                onClick={handleTransferSubmit}
+                className="min-h-[48px] flex-1"
+              >
+                Transfer Now
+              </PrimaryButton>
             </div>
           </div>
+        )}
 
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => setActiveTab("menu")}
-              className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              onClick={handleReserveSubmit}
-              className="min-h-[48px] flex-1"
-            >
-              Set Reserved
-            </PrimaryButton>
+        {/* Merge Table Form */}
+        {activeTab === "merge" && (
+          <div className="flex flex-col gap-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-stone-200">Merge Into Table</h4>
+              <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline cursor-pointer">
+                Back to Menu
+              </button>
+            </div>
+            <p className="text-xs text-stone-400">
+              Merge items from {table.name} into another occupied table order.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
+              {occupiedOtherTables.map((t) => {
+                const { grandTotal } = orderTotal(t.items || [], menuItems);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTargetTableId(t.id)}
+                    className={`min-h-[52px] p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                      targetTableId === t.id
+                        ? "bg-amber-500 text-stone-950 border-amber-400 font-bold"
+                        : "bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center w-full">
+                      <span>{t.name || `Table ${t.number}`}</span>
+                      <span className="text-xs">{t.items?.length || 0} items</span>
+                    </div>
+                    <span className="text-xs opacity-80 mt-1">{currency(grandTotal)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => setActiveTab("menu")}
+                className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+              <PrimaryButton
+                disabled={!targetTableId}
+                onClick={handleMergeSubmit}
+                className="min-h-[48px] flex-1"
+              >
+                Merge Tables
+              </PrimaryButton>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Reserve Form */}
+        {activeTab === "reserve" && (
+          <div className="flex flex-col gap-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-stone-200">Reserve {table.name}</h4>
+              <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline cursor-pointer">
+                Back to Menu
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-stone-300 mb-1 block">Guest / Customer Name</label>
+                <input
+                  type="text"
+                  value={customerNameInput}
+                  onChange={(e) => setCustomerNameInput(e.target.value)}
+                  placeholder="e.g. Rahul Sharma"
+                  className="w-full min-h-[48px] rounded-xl bg-stone-800 border border-stone-700 px-3 text-sm text-stone-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-stone-300 mb-1 block">Guest Count</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={capacityInput}
+                  onChange={(e) => setCapacityInput(e.target.value)}
+                  className="w-full min-h-[48px] rounded-xl bg-stone-800 border border-stone-700 px-3 text-sm text-stone-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => setActiveTab("menu")}
+                className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+              <PrimaryButton
+                onClick={handleReserveSubmit}
+                className="min-h-[48px] flex-1"
+              >
+                Set Reserved
+              </PrimaryButton>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title={`Delete ${table.name}`}
+          message={`Are you sure you want to delete ${table.name}? This action cannot be undone.`}
+          confirmLabel="Delete Table"
+          onConfirm={() => {
+            if (onDeleteTable) onDeleteTable(table.id);
+            setShowDeleteConfirm(false);
+            onClose();
+          }}
+          onClose={() => setShowDeleteConfirm(false)}
+        />
       )}
-    </Modal>
+    </>
   );
 }

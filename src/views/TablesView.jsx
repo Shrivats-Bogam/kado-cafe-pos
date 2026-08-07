@@ -9,7 +9,7 @@ import {
   TableTimeline,
   TableFloorPlan,
 } from "../components/tables/index.js";
-import { PrimaryButton, Card, ConfirmDialog } from "../components/ui/index.js";
+import { PrimaryButton, ConfirmDialog } from "../components/ui/index.js";
 
 export default function TablesView({
   tables = [],
@@ -45,6 +45,7 @@ export default function TablesView({
       available: 0,
       occupied: 0,
       preparing: 0,
+      waiting: 0,
       ready: 0,
       reserved: 0,
       cleaning: 0,
@@ -55,13 +56,16 @@ export default function TablesView({
       if (t.status === "available") map.available++;
       if (t.status === "cleaning") map.cleaning++;
       if (t.status === "reserved" || t.isReserved) map.reserved++;
-      if (t.status === "preparing" || t.status === "serving" || t.status === "ordering") map.preparing++;
+      if (t.status === "preparing" || t.status === "serving" || t.status === "ordering" || t.status === "waiting") {
+        map.preparing++;
+        map.waiting++;
+      }
       if (t.status === "ready" || t.kitchenStatus === "Ready") map.ready++;
       if (t.priority === "Rush") map.rush++;
 
       if (
         (t.items && t.items.length > 0) ||
-        ["preparing", "serving", "ordering", "ready", "billing", "payment_pending"].includes(t.status)
+        ["preparing", "serving", "ordering", "waiting", "ready", "billing", "payment_pending"].includes(t.status)
       ) {
         map.occupied++;
       }
@@ -73,17 +77,18 @@ export default function TablesView({
   // Filter tables based on search query and active filter
   const filteredTables = useMemo(() => {
     return tables.filter((t) => {
-      // 1. Search Query Filter (Table #, Name, Customer, Phone, Bill ID, Notes)
+      // 1. Multi-Field Search (Table #, Table Name, Customer Name, Phone, Bill ID, Notes)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const numMatch = `table ${t.number}`.includes(query) || `t-${t.number}`.includes(query) || `${t.number}` === query;
         const nameMatch = t.name && t.name.toLowerCase().includes(query);
         const customerMatch = t.customerName && t.customerName.toLowerCase().includes(query);
+        const phoneMatch = t.customerPhone && t.customerPhone.toLowerCase().includes(query);
         const notesMatch = t.notes && t.notes.toLowerCase().includes(query);
         const statusMatch = t.status && t.status.toLowerCase().includes(query);
-        const billMatch = t.id && t.id.toLowerCase().includes(query);
+        const billMatch = (t.id && t.id.toLowerCase().includes(query)) || (t.billId && t.billId.toLowerCase().includes(query));
 
-        if (!numMatch && !nameMatch && !customerMatch && !notesMatch && !statusMatch && !billMatch) return false;
+        if (!numMatch && !nameMatch && !customerMatch && !phoneMatch && !notesMatch && !statusMatch && !billMatch) return false;
       }
 
       // 2. Tab Filter
@@ -92,11 +97,11 @@ export default function TablesView({
       if (activeFilter === "occupied") {
         return (
           (t.items && t.items.length > 0) ||
-          ["preparing", "serving", "ordering", "ready", "billing", "payment_pending"].includes(t.status)
+          ["preparing", "serving", "ordering", "waiting", "ready", "billing", "payment_pending"].includes(t.status)
         );
       }
-      if (activeFilter === "preparing") {
-        return t.status === "preparing" || t.status === "serving" || t.status === "ordering";
+      if (activeFilter === "preparing" || activeFilter === "waiting") {
+        return t.status === "preparing" || t.status === "serving" || t.status === "ordering" || t.status === "waiting";
       }
       if (activeFilter === "ready") return t.status === "ready" || t.kitchenStatus === "Ready";
       if (activeFilter === "reserved") return t.status === "reserved" || Boolean(t.isReserved);
@@ -150,15 +155,15 @@ export default function TablesView({
           <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-2">
             <Home size={32} />
           </div>
-          <h3 className="font-serif text-xl font-bold text-stone-100">No Tables Yet</h3>
+          <h3 className="font-serif text-xl font-bold text-stone-100">No Dining Tables Found</h3>
           <p className="text-sm text-stone-400 max-w-md leading-relaxed">
-            Create your first dining table to begin floor management and guest order taking.
+            Create your first dining table using the Add Table Wizard to start managing seating and taking guest orders.
           </p>
           <PrimaryButton
             onClick={() => setShowAddModal(true)}
-            className="mt-2 text-xs flex items-center gap-1.5 px-5 py-3 shadow-md"
+            className="mt-2 text-xs flex items-center gap-1.5 px-5 py-3 shadow-md min-h-[48px]"
           >
-            <Plus size={16} /> Add Table
+            <Plus size={16} /> Add Table Wizard
           </PrimaryButton>
         </div>
       ) : viewMode === "floor" ? (
@@ -202,7 +207,7 @@ export default function TablesView({
               setSearchQuery("");
               setActiveFilter("all");
             }}
-            className="min-h-[48px] px-5 py-2.5 rounded-2xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 text-sm font-semibold flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+            className="min-h-[48px] px-5 py-2.5 rounded-2xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 text-sm font-semibold flex items-center gap-2 transition-all active:scale-95 shadow-sm cursor-pointer"
           >
             <RefreshCw size={16} className="text-amber-400" /> Reset Search & Filters
           </button>
@@ -230,6 +235,7 @@ export default function TablesView({
       {/* Add New Table Wizard Modal */}
       {showAddModal && (
         <TableModal
+          existingTables={tables}
           nextTableNumber={tables.length + 1}
           onClose={() => setShowAddModal(false)}
           onSave={handleSaveTable}
@@ -240,6 +246,7 @@ export default function TablesView({
       {editingTable && (
         <TableModal
           table={editingTable}
+          existingTables={tables}
           onClose={() => setEditingTable(null)}
           onSave={handleSaveTable}
         />
@@ -258,7 +265,7 @@ export default function TablesView({
       {deletingTableId && (
         <ConfirmDialog
           title="Delete Dining Table"
-          message="Are you sure you want to delete this table? This action cannot be undone."
+          message="Are you sure you want to delete this dining table? This action cannot be undone."
           confirmLabel="Delete Table"
           onConfirm={handleConfirmDelete}
           onClose={() => setDeletingTableId(null)}
