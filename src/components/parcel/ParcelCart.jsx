@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ShoppingBag, Plus, Minus, Trash2, Edit3 } from "lucide-react";
-import { currency, orderTotal } from "../lib/currency.js";
+import { currency, orderTotal } from "../../lib/currency.js";
 
 export default function ParcelCart({ 
   cart, 

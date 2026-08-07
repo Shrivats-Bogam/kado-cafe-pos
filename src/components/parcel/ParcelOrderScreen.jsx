@@ -4,8 +4,8 @@ import ParcelCustomerPanel from "./ParcelCustomerPanel.jsx";
 import ParcelPaymentPanel from "./ParcelPaymentPanel.jsx";
 import ParcelMenu from "./ParcelMenu.jsx";
 import ParcelCart from "./ParcelCart.jsx";
-import { currency, orderTotal } from "../lib/currency.js";
-import { makeId } from "../lib/id.js";
+import { currency, orderTotal } from "../../lib/currency.js";
+import { makeId } from "../../lib/id.js";
 
 export default function ParcelOrderScreen({ 
   menuItems, 

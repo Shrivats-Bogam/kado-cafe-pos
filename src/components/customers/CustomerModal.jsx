@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, User, Phone, Calendar, Heart, StickyNote } from "lucide-react";
-import { Card, PrimaryButton, IconButton, TextInput } from "./ui.jsx";
+import { Card, PrimaryButton, IconButton, TextInput } from "../ui/index.js";
 
 export function CustomerModal({ customer, onClose, onSave }) {
   const isEdit = Boolean(customer);

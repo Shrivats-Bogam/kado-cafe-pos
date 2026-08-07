@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Coffee, ChefHat, AlertTriangle, Package, Users, PackageX, Activity, CheckCircle2 } from "lucide-react";
-import { Card, Pill } from "../ui.jsx";
+import { Card, Pill } from "../ui/index.js";
 
 export function DashboardAlerts({ state }) {
   const { tables = [], parcels = [], users = [], inventory = [] } = state || {};

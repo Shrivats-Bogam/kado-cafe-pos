@@ -40,7 +40,6 @@ const TABS = [
 export default function StaffApp() {
   const [state, setStateRaw] = useState(null);
   const [currentUser, setCurrentUser] = useState(loadSession);  // ← hydrate from localStorage on first render
-  console.log("STEP 3: StaffApp render cycle. currentUser is:", currentUser);
   const [tab, setTab] = useState(() => loadUIState()?.tab || "dashboard");
   const [openTableId, setOpenTableId] = useState(() => loadUIState()?.openTableId || null);
   const [qrTableId, setQrTableId] = useState(null);
@@ -74,7 +73,6 @@ export default function StaffApp() {
 
   // ---------- Persist session ----------
   useEffect(() => {
-    console.log("STEP 4: Persist session useEffect. currentUser:", currentUser);
     if (currentUser) saveSession(currentUser);
     else clearSession();
   }, [currentUser]);
@@ -149,12 +147,9 @@ export default function StaffApp() {
   // ---------- Reset tab when role changes scope ----------
   useEffect(() => {
     if (currentUser) {
-      console.log("STEP 5: Role scope check useEffect. currentUser:", currentUser);
       const allowed = ROLE_TABS[currentUser.role] || ROLE_TABS.Owner;
-      console.log("STEP 6: Role scope check. allowed:", allowed, "currentTab:", tab);
       if (!allowed.includes(tab)) {
         const defaultTab = allowed[0] || "dashboard";
-        console.log("STEP 7: Navigating to default tab:", defaultTab);
         setTab(defaultTab);
       }
     }
@@ -162,7 +157,6 @@ export default function StaffApp() {
 
   // ---------- Loading ----------
   if (!state) {
-    console.log("STEP 8: Render Loading (state is null)");
     return (
       <div className="min-h-screen bg-stone-950 flex items-center justify-center text-stone-500 text-sm">
         Loading Kado Cafe...
@@ -170,19 +164,15 @@ export default function StaffApp() {
     );
   }
   if (!currentUser) {
-    console.log("STEP 8: Render LoginScreen (currentUser is falsy)");
     return (
       <>
         <LoginScreen users={state.users} onLogin={(u) => {
-          console.log("STEP 2.5: onLogin callback invoked. Setting currentUser to:", u);
           setCurrentUser(u);
         }} />
         <Toaster toaster={toaster} />
       </>
     );
   }
-
-  console.log("STEP 8: Render Main App View (currentUser exists)");
 
   // ---------- Handlers ----------
   // `update` applies a pure action to the current state. Each action lives in

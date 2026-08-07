@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
 import { Coffee, SearchX, RefreshCw, Plus, Home } from "lucide-react";
-import TableStats from "../components/TableStats.jsx";
-import { TableToolbar } from "../components/TableToolbar.jsx";
-import TableCard from "../components/TableCard.jsx";
-import TableActionsMenu from "../components/TableActionsMenu.jsx";
-import { TableModal } from "../components/TableModal.jsx";
-import { TableTimeline } from "../components/TableTimeline.jsx";
-import { TableFloorPlan } from "../components/TableFloorPlan.jsx";
+import {
+  TableStats,
+  TableToolbar,
+  TableCard,
+  TableActionsMenu,
+  TableModal,
+  TableTimeline,
+  TableFloorPlan,
+} from "../components/tables/index.js";
 import { PrimaryButton, Card, ConfirmDialog } from "../components/ui/index.js";
 
 export default function TablesView({

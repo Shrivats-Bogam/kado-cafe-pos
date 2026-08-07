@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { History, Receipt, Users, Package, ChefHat, Clock, ShieldAlert } from "lucide-react";
-import { Card, Pill } from "../ui.jsx";
+import { Card, Pill } from "../ui/index.js";
 import { currency } from "../../lib/currency.js";
 
 export function RecentActivity({ state }) {

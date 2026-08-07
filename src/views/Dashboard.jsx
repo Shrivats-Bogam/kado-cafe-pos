@@ -1,9 +1,11 @@
-import { DashboardHeader } from "../components/dashboard/DashboardHeader.jsx";
-import { DashboardKPIs } from "../components/dashboard/DashboardKPIs.jsx";
-import { QuickActions } from "../components/dashboard/QuickActions.jsx";
-import { DashboardAlerts } from "../components/dashboard/DashboardAlerts.jsx";
-import { SalesOverview } from "../components/dashboard/SalesOverview.jsx";
-import { RecentActivity } from "../components/dashboard/RecentActivity.jsx";
+import {
+  DashboardHeader,
+  DashboardKPIs,
+  QuickActions,
+  DashboardAlerts,
+  SalesOverview,
+  RecentActivity,
+} from "../components/dashboard/index.js";
 
 export default function Dashboard({ state, onNavigate, user }) {
   return (

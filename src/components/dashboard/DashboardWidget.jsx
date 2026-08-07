@@ -1,4 +1,4 @@
-import { Card } from "../ui.jsx";
+import { Card } from "../ui/index.js";
 
 export function DashboardWidget({
   title,

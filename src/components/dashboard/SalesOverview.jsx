@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Sparkles, TrendingUp, Flame, Clock, Award, ShoppingBag, ArrowDownRight } from "lucide-react";
-import { Card, Pill } from "../ui.jsx";
+import { Card, Pill } from "../ui/index.js";
 import { currency } from "../../lib/currency.js";
 import { topSellers, aggregateItemSales } from "../../lib/aggregate.js";
 

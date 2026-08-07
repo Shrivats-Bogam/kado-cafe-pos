@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { X, Clock, ShoppingBag, Zap, CheckCircle2, Receipt, Coffee } from "lucide-react";
-import { Card, Pill, IconButton } from "./ui.jsx";
-import { currency } from "../lib/currency.js";
-import { indexById } from "../lib/menuIndex.js";
+import { Card, Pill, IconButton } from "../ui/index.js";
+import { currency } from "../../lib/currency.js";
+import { indexById } from "../../lib/menuIndex.js";
 
 export function TableTimeline({ table, menuItems = [], onClose }) {
   const events = useMemo(() => {

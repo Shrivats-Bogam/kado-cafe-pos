@@ -1,4 +1,4 @@
-import { CATEGORIES } from "../data/menu.js";
+import { CATEGORIES } from "../../data/menu.js";
 
 export default function ParcelCategoryTabs({ activeCat, setActiveCat, hasQuery }) {
   return (

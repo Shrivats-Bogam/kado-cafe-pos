@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Users, UserCheck, Sparkles, Award, Cake, Heart, TrendingUp, ChevronRight, Star, ShoppingBag } from "lucide-react";
-import { Card, Pill, StatCard } from "./ui.jsx";
-import { currency } from "../lib/currency.js";
-import { daysUntilBirthday } from "../lib/loyalty.js";
+import { Card, Pill, StatCard } from "../ui/index.js";
+import { currency } from "../../lib/currency.js";
+import { daysUntilBirthday } from "../../lib/loyalty.js";
 import { getCustomerTier, formatRelativeDate } from "./CustomerCard.jsx";
 
 export function CRMAnalytics({ customers = [], orderHistory = [], onSelectCustomer }) {

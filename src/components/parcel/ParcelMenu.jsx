@@ -1,7 +1,7 @@
 import { useState, useDeferredValue, useMemo, memo } from "react";
 import { Search, Plus, Minus } from "lucide-react";
 import ParcelCategoryTabs from "./ParcelCategoryTabs.jsx";
-import { currency } from "../lib/currency.js";
+import { currency } from "../../lib/currency.js";
 
 const MenuItemCard = memo(function MenuItemCard({ item, qty, onAdd, onRemove }) {
   return (

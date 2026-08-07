@@ -1,5 +1,5 @@
 import { LayoutGrid, Map, Plus } from "lucide-react";
-import { PrimaryButton } from "./ui.jsx";
+import { PrimaryButton } from "../ui/index.js";
 import TableSearch from "./TableSearch.jsx";
 import TableFilters from "./TableFilters.jsx";
 

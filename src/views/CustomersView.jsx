@@ -1,10 +1,13 @@
 import { useState, useMemo } from "react";
 import { Search, Plus, Users, BarChart3, UserX, Award, Sparkles } from "lucide-react";
 import { PrimaryButton, Pill } from "../components/ui.jsx";
-import { CustomerCard, getCustomerTier } from "../components/CustomerCard.jsx";
-import { CustomerProfileDrawer } from "../components/CustomerProfileDrawer.jsx";
-import { CustomerModal } from "../components/CustomerModal.jsx";
-import { CRMAnalytics } from "../components/CRMAnalytics.jsx";
+import {
+  CustomerCard,
+  getCustomerTier,
+  CustomerProfileDrawer,
+  CustomerModal,
+  CRMAnalytics,
+} from "../components/customers/index.js";
 
 export default function CustomersView({
   customers = [],

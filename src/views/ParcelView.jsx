@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Plus, Phone, Trash2, Edit, Search, Clock, CheckCircle2, PackageCheck } from "lucide-react";
 import { Card, Pill, IconButton, PrimaryButton } from "../components/ui.jsx";
-import ParcelOrderScreen from "../components/ParcelOrderScreen.jsx";
+import { ParcelOrderScreen } from "../components/parcel/index.js";
 import { PARCEL_STATUSES } from "../data/defaults.js";
 import { currency, orderTotal } from "../lib/currency.js";
 

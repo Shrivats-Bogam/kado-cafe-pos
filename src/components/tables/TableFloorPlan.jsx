@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Users, Move, ShoppingBag, Clock, Sparkles } from "lucide-react";
 import TableStatusBadge from "./TableStatusBadge.jsx";
-import { currency, orderTotal } from "../lib/currency.js";
+import { currency, orderTotal } from "../../lib/currency.js";
 import { TABLE_SHAPES } from "./TableModal.jsx";
 
 export function TableFloorPlan({

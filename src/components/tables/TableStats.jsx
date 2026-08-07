@@ -1,5 +1,5 @@
 import { Coffee, CheckCircle2, Clock, Banknote } from "lucide-react";
-import { currency, orderTotal } from "../lib/currency.js";
+import { currency, orderTotal } from "../../lib/currency.js";
 
 export default function TableStats({ tables, menuItems }) {
   const totalTables = tables.length;

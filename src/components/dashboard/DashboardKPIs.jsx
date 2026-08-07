@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { DollarSign, ShoppingBag, Users, ChefHat, AlertTriangle, TrendingUp, TrendingDown, Clock, Info } from "lucide-react";
-import { Card } from "../ui.jsx";
+import { Card } from "../ui/index.js";
 import { currency } from "../../lib/currency.js";
 
 export function DashboardKPIs({ state }) {
