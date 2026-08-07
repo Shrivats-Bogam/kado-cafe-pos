@@ -190,6 +190,10 @@ export default function StaffApp() {
   // the React tree. The signatures passed to child views are unchanged.
   const update = (apply) => setStateRaw((prev) => apply(prev));
 
+  const addTable = (tableData) => update((s) => actions.addTable(s, tableData));
+  const editTable = (tableId, patch) => update((s) => actions.editTable(s, tableId, patch));
+  const deleteTable = (tableId) => update((s) => actions.deleteTable(s, tableId));
+
   const saveTableOrder = (tableId, items, customerName, opts = {}) =>
     update((s) => actions.saveTableOrder(s, tableId, items, customerName, opts));
 
@@ -313,7 +317,7 @@ export default function StaffApp() {
         </div>
 
         <div className="p-4 max-w-5xl mx-auto">
-          {tab === "dashboard" && <Dashboard state={state} />}
+          {tab === "dashboard" && <Dashboard state={state} onNavigate={setTab} user={currentUser} />}
           {tab === "tables" && (
             <TablesView
               tables={state.tables}
@@ -327,6 +331,9 @@ export default function StaffApp() {
               onReserveTable={reserveTable}
               onSetCleaning={setTableCleaning}
               onDuplicateOrder={duplicateTableOrder}
+              onAddTable={addTable}
+              onEditTable={editTable}
+              onDeleteTable={deleteTable}
             />
           )}
           {tab === "kitchen" && (

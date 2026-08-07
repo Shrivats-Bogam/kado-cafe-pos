@@ -18,6 +18,50 @@ import { makeId } from "../lib/id.js";
 
 // --- Tables ---------------------------------------------------------------
 
+export function addTable(state, tableData) {
+  const nextNumber = tableData.number ? Number(tableData.number) : (state.tables.length + 1);
+  const newTable = {
+    id: tableData.id || `t_${Date.now()}`,
+    number: nextNumber,
+    name: tableData.name || `Table ${nextNumber}`,
+    capacity: Number(tableData.capacity || 4),
+    type: tableData.type || "Indoor",
+    shape: tableData.shape || "square",
+    area: tableData.area || tableData.type || "Main Dining",
+    notes: tableData.notes || "",
+    qrEnabled: tableData.qrEnabled !== false,
+    status: "available",
+    items: [],
+    customerName: "",
+    startedAt: null,
+    kitchenStatus: "New",
+    priority: "Normal",
+    priorityAt: null,
+    orderHistory: [],
+    openedAt: null,
+    x: tableData.x ?? 0,
+    y: tableData.y ?? 0,
+  };
+  return {
+    ...state,
+    tables: [...state.tables, newTable],
+  };
+}
+
+export function editTable(state, tableId, patch) {
+  return {
+    ...state,
+    tables: state.tables.map((t) => (t.id === tableId ? { ...t, ...patch } : t)),
+  };
+}
+
+export function deleteTable(state, tableId) {
+  return {
+    ...state,
+    tables: state.tables.filter((t) => t.id !== tableId),
+  };
+}
+
 export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
   const wasEmpty = state.tables.find((t) => t.id === tableId)?.items?.length === 0;
   const nextTables = state.tables.map((t) => (t.id === tableId ? {

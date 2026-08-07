@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
-  ArrowRightLeft, Merge, Split, BookmarkCheck, Sparkles, QrCode,
-  Copy, X, ChevronRight, Check, AlertCircle, ShoppingBag
+  ArrowRightLeft, Merge, Split, BookmarkCheck, QrCode,
+  ChevronRight, AlertCircle, Edit2, Trash2, Coffee
 } from "lucide-react";
-import { Modal, ModalHeader, PrimaryButton, IconButton } from "./ui.jsx";
+import { Modal, ModalHeader, PrimaryButton } from "./ui/index.js";
 import { orderTotal, currency } from "../lib/currency.js";
 
 export default function TableActionsMenu({
@@ -11,40 +11,35 @@ export default function TableActionsMenu({
   tables = [],
   menuItems = [],
   onClose,
+  onOpenTable,
   onShowQR,
   onTransferTable,
   onMergeTable,
   onSplitTable,
   onReserveTable,
-  onSetCleaning,
-  onDuplicateOrder,
+  onEditTable,
+  onDeleteTable,
 }) {
-  const [activeTab, setActiveTab] = useState("menu"); // "menu" | "transfer" | "merge" | "split" | "reserve" | "duplicate"
+  const [activeTab, setActiveTab] = useState("menu");
   const [targetTableId, setTargetTableId] = useState("");
   const [customerNameInput, setCustomerNameInput] = useState(table.customerName || "");
   const [capacityInput, setCapacityInput] = useState(table.capacity || 4);
   const [splitQuantities, setSplitQuantities] = useState({});
   const [feedbackMsg, setFeedbackMsg] = useState("");
 
-  const otherTables = tables.filter((t) => t.id !== table.id);
+  const otherTables = (tables || []).filter((t) => t.id !== table.id);
   const availableTables = otherTables.filter((t) => t.status === "available");
-  const occupiedOtherTables = otherTables.filter((t) => t.items.length > 0);
-
-  // --- Handlers ---
+  const occupiedOtherTables = otherTables.filter((t) => t.items && t.items.length > 0);
 
   const handleTransferSubmit = () => {
     if (!targetTableId) return;
-    if (onTransferTable) {
-      onTransferTable(table.id, targetTableId);
-    }
+    if (onTransferTable) onTransferTable(table.id, targetTableId);
     onClose();
   };
 
   const handleMergeSubmit = () => {
     if (!targetTableId) return;
-    if (onMergeTable) {
-      onMergeTable(table.id, targetTableId);
-    }
+    if (onMergeTable) onMergeTable(table.id, targetTableId);
     onClose();
   };
 
@@ -59,61 +54,39 @@ export default function TableActionsMenu({
       return;
     }
 
-    if (onSplitTable) {
-      onSplitTable(table.id, targetTableId, itemsToMove);
-    }
+    if (onSplitTable) onSplitTable(table.id, targetTableId, itemsToMove);
     onClose();
   };
 
   const handleReserveSubmit = () => {
-    if (onReserveTable) {
-      onReserveTable(table.id, customerNameInput, capacityInput);
-    }
-    onClose();
-  };
-
-  const handleCleaningToggle = () => {
-    if (onSetCleaning) {
-      onSetCleaning(table.id);
-    }
-    onClose();
-  };
-
-  const handleDuplicateSubmit = () => {
-    if (!targetTableId) return;
-    if (onDuplicateOrder) {
-      onDuplicateOrder(table.id, targetTableId);
-    }
+    if (onReserveTable) onReserveTable(table.id, customerNameInput, capacityInput);
     onClose();
   };
 
   const menuOptions = [
     {
-      id: "transfer",
-      label: "Transfer Table",
-      desc: "Move entire order to another table",
-      icon: ArrowRightLeft,
-      color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
-      disabled: table.items.length === 0 || availableTables.length === 0,
-      disabledReason: table.items.length === 0 ? "No active items" : "No available tables",
-    },
-    {
-      id: "merge",
-      label: "Merge Table",
-      desc: "Combine items with another table",
-      icon: Merge,
-      color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-      disabled: table.items.length === 0 || occupiedOtherTables.length === 0,
-      disabledReason: table.items.length === 0 ? "No active items" : "No other occupied tables",
-    },
-    {
-      id: "split",
-      label: "Split Table",
-      desc: "Move selected items to another table",
-      icon: Split,
+      id: "open",
+      label: "Open Table Order",
+      desc: "Open order taking screen for table",
+      icon: Coffee,
       color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-      disabled: table.items.length === 0 || otherTables.length === 0,
-      disabledReason: table.items.length === 0 ? "No active items" : "No target tables",
+      disabled: false,
+      onClick: () => {
+        if (onOpenTable) onOpenTable(table.id);
+        onClose();
+      },
+    },
+    {
+      id: "edit",
+      label: "Rename / Edit Table",
+      desc: "Change table name, capacity, shape & area",
+      icon: Edit2,
+      color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+      disabled: false,
+      onClick: () => {
+        if (onEditTable) onEditTable(table);
+        onClose();
+      },
     },
     {
       id: "reserve",
@@ -124,18 +97,36 @@ export default function TableActionsMenu({
       disabled: false,
     },
     {
-      id: "cleaning",
-      label: table.status === "cleaning" ? "Finish Cleaning" : "Cleaning Mode",
-      desc: table.status === "cleaning" ? "Mark table clean & available" : "Mark table for housekeeping",
-      icon: Sparkles,
-      color: "text-stone-400 bg-stone-500/10 border-stone-500/20",
-      disabled: false,
-      onClick: handleCleaningToggle,
+      id: "transfer",
+      label: "Transfer Table",
+      desc: "Move entire order to another table",
+      icon: ArrowRightLeft,
+      color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
+      disabled: !table.items || table.items.length === 0 || availableTables.length === 0,
+      disabledReason: !table.items || table.items.length === 0 ? "No active items" : "No available tables",
+    },
+    {
+      id: "merge",
+      label: "Merge Table",
+      desc: "Combine items with another table",
+      icon: Merge,
+      color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+      disabled: !table.items || table.items.length === 0 || occupiedOtherTables.length === 0,
+      disabledReason: !table.items || table.items.length === 0 ? "No active items" : "No other occupied tables",
+    },
+    {
+      id: "split",
+      label: "Split Table",
+      desc: "Move selected items to another table",
+      icon: Split,
+      color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+      disabled: !table.items || table.items.length === 0 || otherTables.length === 0,
+      disabledReason: !table.items || table.items.length === 0 ? "No active items" : "No target tables",
     },
     {
       id: "qr",
-      label: "Generate QR",
-      desc: "Show customer QR code menu",
+      label: "Generate QR Code",
+      desc: "View, print, or download customer QR code",
       icon: QrCode,
       color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
       disabled: false,
@@ -145,13 +136,17 @@ export default function TableActionsMenu({
       },
     },
     {
-      id: "duplicate",
-      label: "Duplicate Order",
-      desc: "Copy order items to another table",
-      icon: Copy,
+      id: "delete",
+      label: "Delete Table",
+      desc: "Remove dining table (Requires confirmation)",
+      icon: Trash2,
       color: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-      disabled: table.items.length === 0 || availableTables.length === 0,
-      disabledReason: table.items.length === 0 ? "No active items" : "No available tables",
+      disabled: table.items && table.items.length > 0,
+      disabledReason: "Cannot delete occupied table",
+      onClick: () => {
+        if (onDeleteTable) onDeleteTable(table.id);
+        onClose();
+      },
     },
   ];
 
@@ -183,21 +178,21 @@ export default function TableActionsMenu({
                 className={`min-h-[52px] p-3 rounded-2xl border text-left flex items-center justify-between transition-all duration-200 ${
                   opt.disabled
                     ? "opacity-40 bg-stone-900/50 border-stone-800/50 cursor-not-allowed"
-                    : "bg-stone-900 hover:bg-stone-800 border-stone-800 hover:border-stone-700 active:scale-[0.99]"
+                    : "bg-stone-900 hover:bg-stone-800 border-stone-800 hover:border-stone-700 active:scale-[0.99] cursor-pointer"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${opt.color}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${opt.color}`}>
                     <Icon size={18} />
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-sm text-stone-100">{opt.label}</h4>
-                    <p className="text-xs text-stone-400">
+                  <div className="min-w-0">
+                    <h4 className="font-semibold text-sm text-stone-100 truncate">{opt.label}</h4>
+                    <p className="text-xs text-stone-400 truncate">
                       {opt.disabled ? opt.disabledReason : opt.desc}
                     </p>
                   </div>
                 </div>
-                {!opt.disabled && <ChevronRight size={18} className="text-stone-500" />}
+                {!opt.disabled && <ChevronRight size={18} className="text-stone-500 shrink-0" />}
               </button>
             );
           })}
@@ -214,7 +209,7 @@ export default function TableActionsMenu({
             </button>
           </div>
           <p className="text-xs text-stone-400">
-            Transfer all {table.items.length} items from Table {table.number} to an available table.
+            Transfer all {table.items?.length || 0} items from Table {table.number} to an available table.
           </p>
 
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
@@ -267,7 +262,7 @@ export default function TableActionsMenu({
 
           <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
             {occupiedOtherTables.map((t) => {
-              const { grandTotal } = orderTotal(t.items, menuItems);
+              const { grandTotal } = orderTotal(t.items || [], menuItems);
               return (
                 <button
                   key={t.id}
@@ -280,7 +275,7 @@ export default function TableActionsMenu({
                 >
                   <div className="flex justify-between items-center w-full">
                     <span>Table {t.number}</span>
-                    <span className="text-xs">{t.items.length} items</span>
+                    <span className="text-xs">{t.items?.length || 0} items</span>
                   </div>
                   <span className="text-xs opacity-80 mt-1">{currency(grandTotal)}</span>
                 </button>
@@ -301,101 +296,6 @@ export default function TableActionsMenu({
               className="min-h-[48px] flex-1"
             >
               Merge Tables
-            </PrimaryButton>
-          </div>
-        </div>
-      )}
-
-      {/* Split Table Form */}
-      {activeTab === "split" && (
-        <div className="flex flex-col gap-4 mt-4 max-h-[75vh] overflow-y-auto no-scrollbar">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-stone-200">Split Items</h4>
-            <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline">
-              Back to Menu
-            </button>
-          </div>
-
-          <p className="text-xs text-stone-400">
-            Select items and quantities to move from Table {table.number} to a target table.
-          </p>
-
-          {feedbackMsg && (
-            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-1.5">
-              <AlertCircle size={14} />
-              <span>{feedbackMsg}</span>
-            </div>
-          )}
-
-          {/* Item Selector */}
-          <div className="flex flex-col gap-2 border border-stone-800 rounded-xl p-2 bg-stone-950">
-            {table.items.map((it) => {
-              const mi = menuItems.find((m) => m.id === it.menuItemId);
-              const currentMoveQty = splitQuantities[it.menuItemId] || 0;
-
-              return (
-                <div key={it.menuItemId} className="flex items-center justify-between p-2 rounded-lg bg-stone-900 border border-stone-800">
-                  <div>
-                    <p className="text-xs font-semibold text-stone-100">{mi?.name || "Item"}</p>
-                    <p className="text-[11px] text-stone-400">{currency(mi?.price || 0)} each</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSplitQuantities((prev) => ({
-                        ...prev,
-                        [it.menuItemId]: Math.max(0, (prev[it.menuItemId] || 0) - 1),
-                      }))}
-                      className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 flex items-center justify-center font-bold"
-                    >
-                      -
-                    </button>
-                    <span className="text-xs font-bold text-amber-400 w-6 text-center">
-                      {currentMoveQty} / {it.qty}
-                    </span>
-                    <button
-                      onClick={() => setSplitQuantities((prev) => ({
-                        ...prev,
-                        [it.menuItemId]: Math.min(it.qty, (prev[it.menuItemId] || 0) + 1),
-                      }))}
-                      className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 flex items-center justify-center font-bold"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-stone-300 mb-1 block">Destination Table</label>
-            <select
-              value={targetTableId}
-              onChange={(e) => setTargetTableId(e.target.value)}
-              className="w-full min-h-[48px] rounded-xl bg-stone-800 border border-stone-700 px-3 text-sm text-stone-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-              <option value="">Select Target Table...</option>
-              {otherTables.map((t) => (
-                <option key={t.id} value={t.id}>
-                  Table {t.number} ({t.status === "available" ? "Available" : `${t.items.length} items`})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => setActiveTab("menu")}
-              className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              disabled={!targetTableId}
-              onClick={handleSplitSubmit}
-              className="min-h-[48px] flex-1"
-            >
-              Split Selected Items
             </PrimaryButton>
           </div>
         </div>
@@ -448,54 +348,6 @@ export default function TableActionsMenu({
               className="min-h-[48px] flex-1"
             >
               Set Reserved
-            </PrimaryButton>
-          </div>
-        </div>
-      )}
-
-      {/* Duplicate Form */}
-      {activeTab === "duplicate" && (
-        <div className="flex flex-col gap-4 mt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-stone-200">Duplicate Order</h4>
-            <button onClick={() => setActiveTab("menu")} className="text-xs text-amber-400 hover:underline">
-              Back to Menu
-            </button>
-          </div>
-          <p className="text-xs text-stone-400">
-            Copy all {table.items.length} items from Table {table.number} to an available table.
-          </p>
-
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto no-scrollbar py-1">
-            {availableTables.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTargetTableId(t.id)}
-                className={`min-h-[48px] p-3 rounded-xl border font-medium text-sm flex flex-col items-center justify-center transition-all ${
-                  targetTableId === t.id
-                    ? "bg-amber-500 text-stone-950 border-amber-400 font-bold"
-                    : "bg-stone-800 text-stone-200 border-stone-700 hover:bg-stone-700"
-                }`}
-              >
-                <span>T-{t.number}</span>
-                <span className="text-[10px] opacity-75">Available</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => setActiveTab("menu")}
-              className="min-h-[48px] flex-1 rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              disabled={!targetTableId}
-              onClick={handleDuplicateSubmit}
-              className="min-h-[48px] flex-1"
-            >
-              Duplicate Order
             </PrimaryButton>
           </div>
         </div>
