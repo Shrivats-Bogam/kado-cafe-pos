@@ -327,8 +327,14 @@ export default function StaffApp() {
           </div>
         </div>
 
-        <div className="p-4 max-w-5xl mx-auto">
-          {tab === "dashboard" && <Dashboard state={state} />}
+        <div className="p-4 max-w-6xl mx-auto">
+          {tab === "dashboard" && (
+            <Dashboard 
+              state={state} 
+              onNavigate={(targetTab) => setTab(targetTab)} 
+              currentUser={currentUser} 
+            />
+          )}
           {tab === "tables" && (
             <TablesView
               tables={state.tables}
