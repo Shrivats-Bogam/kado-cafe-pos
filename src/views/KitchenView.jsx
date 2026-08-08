@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { ChefHat } from "lucide-react";
+import { ChefHat, CheckCircle2 } from "lucide-react";
 import KitchenTicket from "../components/KitchenTicket.jsx";
 import KitchenFilters from "../components/KitchenFilters.jsx";
 import KitchenBulkActions from "../components/KitchenBulkActions.jsx";
 import { minutesSince } from "../lib/currency.js";
 
-// Audio Beep for new orders
+// Web Audio API Beep for genuinely new incoming orders
 const playBeep = () => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -14,21 +14,21 @@ const playBeep = () => {
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime); // High pitch A5
-    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); // Slide to A6
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.1, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
     osc.start();
     osc.stop(ctx.currentTime + 0.15);
   } catch (e) {
-    // Ignore if audio context fails (e.g., lack of user interaction)
+    // Ignore audio context failures
   }
 };
 
 export default function KitchenView({ 
-  tables, 
-  parcels, 
-  menuItems, 
+  tables = [], 
+  parcels = [], 
+  menuItems = [], 
   onCycleKitchen, 
   onSetPriority, 
   currentUser 
@@ -45,10 +45,10 @@ export default function KitchenView({
     return () => clearInterval(interval);
   }, []);
 
-  // Sound Notification Tracking
+  // Sound Notification Tracking (prevents audio spam on reload/filters)
   const seenTicketsRef = useRef(new Set());
   
-  // Unify Tables and Parcels into a single "Ticket" array
+  // Unify Tables and Parcels into a single "Ticket" array (PART 1)
   const tickets = useMemo(() => {
     const unified = [];
     
@@ -60,45 +60,48 @@ export default function KitchenView({
             unified.push({
               id: ticket.id,
               type: "table",
-              number: t.kitchenTickets.length > 1 ? `${t.number} (#${idx + 1})` : t.number,
-              customerName: t.customerName,
-              items: ticket.items,
+              tableId: t.id,
+              number: t.kitchenTickets.length > 1 ? `${t.number} (#${idx + 1})` : `${t.number}`,
+              customerName: ticket.customerName || t.customerName || `Table ${t.number}`,
+              items: ticket.items || [],
               status: ticket.status || "New",
               priority: ticket.priority || t.priority || "Normal",
-              createdAt: ticket.createdAt || t.startedAt,
-              notes: null
+              createdAt: ticket.createdAt || t.startedAt || new Date().toISOString(),
+              notes: ticket.notes || t.orderNotes || null,
             });
           }
         });
-      } else if (t.items.length > 0 && t.kitchenStatus !== "Served") {
+      } else if (t.items && t.items.length > 0 && t.kitchenStatus !== "Served") {
         // Fallback for legacy table state without kitchenTickets array
         unified.push({
           id: t.id,
           type: "table",
-          number: t.number,
-          customerName: t.customerName,
+          tableId: t.id,
+          number: `${t.number}`,
+          customerName: t.customerName || `Table ${t.number}`,
           items: t.items,
-          status: t.kitchenStatus,
-          priority: t.priority,
-          createdAt: t.startedAt,
-          notes: null
+          status: t.kitchenStatus || "New",
+          priority: t.priority || "Normal",
+          createdAt: t.startedAt || new Date().toISOString(),
+          notes: t.orderNotes || null,
         });
       }
     });
 
     // Process Parcels
     parcels.forEach((p) => {
-      if (p.status === "Preparing" || p.status === "Ready") {
+      if (p.status === "New" || p.status === "Preparing" || p.status === "Ready") {
         unified.push({
           id: p.id,
           type: "parcel",
-          number: p.id.slice(-4).toUpperCase(), // Display part of ID as parcel number
-          customerName: p.customerName,
-          items: p.items,
-          status: p.status,
-          priority: p.priority,
-          createdAt: p.createdAt,
-          notes: p.notes
+          parcelId: p.id,
+          number: p.id.slice(-4).toUpperCase(),
+          customerName: p.customerName || "Parcel Guest",
+          items: p.items || [],
+          status: p.status || "New",
+          priority: p.priority || "Normal",
+          createdAt: p.createdAt || new Date().toISOString(),
+          notes: p.notes || null,
         });
       }
     });
@@ -106,83 +109,90 @@ export default function KitchenView({
     return unified;
   }, [tables, parcels]);
 
-  // Handle New Order Sound
+  // Handle Sound Alerts: Play audio ONLY for genuinely new tickets (< 2 min old)
   useEffect(() => {
-    let hasNew = false;
-    const currentIds = new Set(tickets.map(t => t.id));
+    let hasNewTicket = false;
+    const currentIds = new Set(tickets.map((t) => t.id));
     
-    tickets.forEach(t => {
+    tickets.forEach((t) => {
       if (!seenTicketsRef.current.has(t.id)) {
-        // Only trigger sound if the ticket is genuinely new (created recently)
-        // This prevents sound bombs on full reload
         const mins = minutesSince(t.createdAt);
         if (mins < 2) {
-          hasNew = true;
+          hasNewTicket = true;
         }
       }
     });
 
-    if (hasNew) {
+    if (hasNewTicket && seenTicketsRef.current.size > 0) {
       playBeep();
     }
     
     seenTicketsRef.current = currentIds;
   }, [tickets]);
 
-  // Calculate Urgency and Sort
+  // Process Urgency Levels, Filters, Search & Strict Priority Sorting (PART 2)
   const processedTickets = useMemo(() => {
-    let filtered = tickets.map(t => {
+    let filtered = tickets.map((t) => {
       const elapsedMinutes = minutesSince(t.createdAt);
       let urgencyLevel = "Normal";
       
-      if (t.priority === "Rush" || elapsedMinutes >= 10) {
+      if (t.priority === "Rush" || elapsedMinutes >= 30) {
         urgencyLevel = "Urgent";
-      } else if (elapsedMinutes >= 5) {
+      } else if (elapsedMinutes >= 15) {
         urgencyLevel = "Attention";
       }
 
       return { ...t, elapsedMinutes, urgencyLevel };
     });
 
-    // Apply Quick Filters
-    if (filter === "Preparing") {
-      filtered = filtered.filter(t => t.status === "New" || t.status === "Cooking" || t.status === "Preparing");
+    // Apply Filter Chips (PART 13)
+    if (filter === "New") {
+      filtered = filtered.filter((t) => t.status === "New");
+    } else if (filter === "Cooking") {
+      filtered = filtered.filter((t) => t.status === "Cooking" || t.status === "Preparing");
     } else if (filter === "Ready") {
-      filtered = filtered.filter(t => t.status === "Ready");
+      filtered = filtered.filter((t) => t.status === "Ready");
+    } else if (filter === "Rush") {
+      filtered = filtered.filter((t) => t.priority === "Rush");
+    } else if (filter === "Table") {
+      filtered = filtered.filter((t) => t.type === "table");
     } else if (filter === "Parcel") {
-      filtered = filtered.filter(t => t.type === "parcel");
-    } else if (filter === "Dine In") {
-      filtered = filtered.filter(t => t.type === "table");
-    } else if (filter === "Urgent") {
-      filtered = filtered.filter(t => t.urgencyLevel === "Urgent");
+      filtered = filtered.filter((t) => t.type === "parcel");
     }
 
-    // Apply Search Query
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(t => {
+    // Apply Multi-Field Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((t) => {
         const matchNumber = String(t.number).toLowerCase().includes(q);
         const matchCustomer = (t.customerName || "").toLowerCase().includes(q);
-        return matchNumber || matchCustomer;
+        const matchId = String(t.id).toLowerCase().includes(q);
+        const matchNotes = (t.notes || "").toLowerCase().includes(q);
+        return matchNumber || matchCustomer || matchId || matchNotes;
       });
     }
 
-    // Sort: Urgent first, then oldest first
+    // Strict Sorting (PART 2):
+    // 1. RUSH tickets first
+    // 2. Oldest waiting ticket (longest elapsed time)
+    // 3. Normal tickets
     filtered.sort((a, b) => {
-      if (a.urgencyLevel === "Urgent" && b.urgencyLevel !== "Urgent") return -1;
-      if (b.urgencyLevel === "Urgent" && a.urgencyLevel !== "Urgent") return 1;
-      
-      // Secondary sort: by elapsed time (descending) so oldest is first
+      const aIsRush = a.priority === "Rush";
+      const bIsRush = b.priority === "Rush";
+      if (aIsRush && !bIsRush) return -1;
+      if (bIsRush && !aIsRush) return 1;
+
+      // Secondary sort: by elapsed time (descending) so oldest waiting ticket is first
       return b.elapsedMinutes - a.elapsedMinutes;
     });
 
     return filtered;
-  }, [tickets, filter, searchQuery, now]); // Depends on `now` to recalculate elapsed/urgency
+  }, [tickets, filter, searchQuery, now]);
 
   // Action Handlers
   const toggleSelect = (id) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    setSelectedIds((prev) => 
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
@@ -191,13 +201,13 @@ export default function KitchenView({
   };
 
   const handleBulkAction = (action) => {
-    selectedIds.forEach(id => {
-      const ticket = tickets.find(t => t.id === id);
+    selectedIds.forEach((id) => {
+      const ticket = tickets.find((t) => t.id === id);
       if (!ticket) return;
 
       let nextStatus = null;
       if (action === "Cooking") {
-        if (ticket.type === "table" && ticket.status === "New") nextStatus = "Cooking";
+        if (ticket.status === "New") nextStatus = "Cooking";
       } else if (action === "Ready") {
         if (ticket.status !== "Ready") nextStatus = "Ready";
       } else if (action === "Complete") {
@@ -210,11 +220,12 @@ export default function KitchenView({
         onCycleKitchen(ticket.type, ticket.id, nextStatus);
       }
     });
-    setSelectedIds([]); // clear selection after bulk action
+    setSelectedIds([]);
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] sm:h-[calc(100vh-48px)] -m-4">
+      {/* Search & Filter Toolbar */}
       <KitchenFilters 
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -224,26 +235,27 @@ export default function KitchenView({
         setDisplayMode={setDisplayMode}
       />
       
+      {/* Main Ticket Queue View */}
       <div className="flex-1 overflow-y-auto p-4 bg-stone-950">
         {processedTickets.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8 mt-10">
-            <div className="bg-stone-900 w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-xl border border-stone-800">
-              <ChefHat size={48} className="text-stone-700" />
+          /* Purposeful Empty State (PART 20) */
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 mt-6 select-none pointer-events-none">
+            <div className="bg-stone-900/80 border border-stone-800 w-24 h-24 rounded-full flex items-center justify-center mb-5 shadow-2xl text-emerald-400">
+              <CheckCircle2 size={48} />
             </div>
-            <h2 className="text-3xl font-serif text-stone-100 mb-2 tracking-wide">Kitchen is clear.</h2>
-            <p className="text-stone-400 text-lg mb-6">No active orders matching the criteria.</p>
-            <div className="flex gap-2 justify-center">
-              <span className="text-4xl">🍽</span>
-              <span className="text-4xl">✨</span>
-            </div>
+            <h2 className="text-2xl font-serif font-bold text-stone-100 mb-1">✓ Kitchen Clear</h2>
+            <p className="text-stone-400 text-sm max-w-sm leading-relaxed">
+              No pending orders. You're all caught up!
+            </p>
           </div>
         ) : (
+          /* Ticket Grid View */
           <div className={`grid gap-4 ${
             displayMode === "large" 
               ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" 
               : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           }`}>
-            {processedTickets.map(ticket => (
+            {processedTickets.map((ticket) => (
               <KitchenTicket
                 key={ticket.id}
                 ticket={ticket}
@@ -260,6 +272,7 @@ export default function KitchenView({
         )}
       </div>
 
+      {/* Bulk Selection Bar */}
       <KitchenBulkActions 
         selectedIds={selectedIds}
         onClearSelection={() => setSelectedIds([])}
