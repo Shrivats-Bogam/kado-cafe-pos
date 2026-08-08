@@ -12,6 +12,8 @@ export default function CustomerList({
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [tierFilter, setTierFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const filtered = useMemo(() => {
     return customers.filter((c) => {
@@ -34,6 +36,10 @@ export default function CustomerList({
       return true;
     }).sort((a, b) => (b.lifetimeSpend || 0) - (a.lifetimeSpend || 0));
   }, [customers, tierFilter, searchQuery]);
+
+  const paginated = useMemo(() => {
+    return filtered.slice(0, page * PAGE_SIZE);
+  }, [filtered, page]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -81,7 +87,7 @@ export default function CustomerList({
             No customers found matching search criteria.
           </div>
         ) : (
-          filtered.map((c) => {
+          paginated.map((c) => {
             const tier = c.membership || "Silver";
             let tierBadge = "bg-stone-800 text-stone-400 border-stone-700";
             if (tier === "Gold") tierBadge = "bg-amber-500/15 text-amber-400 border-amber-500/30 font-bold";
@@ -156,6 +162,19 @@ export default function CustomerList({
           })
         )}
       </div>
+
+      {/* Pagination Load More Button */}
+      {filtered.length > paginated.length && (
+        <div className="flex justify-center pt-3">
+          <button
+            type="button"
+            onClick={() => setPage((p) => p + 1)}
+            className="px-5 py-2.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 font-bold text-xs transition cursor-pointer"
+          >
+            Show More Customers ({filtered.length - paginated.length} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
