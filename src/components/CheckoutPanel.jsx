@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { DollarSign, CreditCard, QrCode, SlidersHorizontal, Check, ShieldCheck, AlertCircle } from "lucide-react";
+import { DollarSign, CreditCard, QrCode, SlidersHorizontal, Check, ShieldCheck, AlertCircle, RefreshCw } from "lucide-react";
 import { Card, PrimaryButton } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
 import { useMenuIndex } from "../lib/menuIndex.js";
@@ -15,6 +15,7 @@ export default function CheckoutPanel({
 }) {
   const menuIdx = useMenuIndex(menuItems);
   const [paymentMode, setPaymentMode] = useState("Cash"); // Cash, UPI, Card, Split, Pending
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Cash Payment State
   const [cashReceived, setCashReceived] = useState("");
@@ -49,9 +50,10 @@ export default function CheckoutPanel({
     const val = parseFloat(discountValue) || 0;
     if (val <= 0) return 0;
     if (discountType === "percent") {
-      return Math.min(subtotal, Math.round((subtotal * val) / 100));
+      const pct = Math.min(100, Math.max(0, val));
+      return Math.min(subtotal, Math.round((subtotal * pct) / 100));
     }
-    return Math.min(subtotal, val);
+    return Math.min(subtotal, Math.max(0, val));
   }, [subtotal, discountType, discountValue]);
 
   // Net after Discount
@@ -80,31 +82,37 @@ export default function CheckoutPanel({
   const grandTotal = Math.round(rawTotal);
   const roundOff = Math.round((grandTotal - rawTotal) * 100) / 100;
 
-  // Cash Change Calculation
+  // Cash Change Calculation (PART 5)
   const cashNum = parseFloat(cashReceived) || 0;
   const cashChange = cashNum > 0 ? Math.max(0, cashNum - grandTotal) : 0;
+  const isCashUnderpaid = paymentMode === "Cash" && cashNum > 0 && cashNum < grandTotal;
 
-  // Split Payment Total Calculation
-  const splitCashNum = parseFloat(splitCash) || 0;
-  const splitUpiNum = parseFloat(splitUpi) || 0;
-  const splitCardNum = parseFloat(splitCard) || 0;
+  // Split Payment Total Calculation (PART 8)
+  const splitCashNum = Math.max(0, parseFloat(splitCash) || 0);
+  const splitUpiNum = Math.max(0, parseFloat(splitUpi) || 0);
+  const splitCardNum = Math.max(0, parseFloat(splitCard) || 0);
   const splitSum = splitCashNum + splitUpiNum + splitCardNum;
   const splitDiff = Math.round((grandTotal - splitSum) * 100) / 100;
 
   // Validation
   const canSubmit = useMemo(() => {
-    if (cart.length === 0) return false;
+    if (cart.length === 0 || isSubmitting) return false;
     if (paymentMode === "Split") {
-      return Math.abs(splitDiff) < 0.01; // Cash + UPI + Card must equal Grand Total
+      return Math.abs(splitDiff) < 0.01 && splitSum > 0; // Cash + UPI + Card must equal Grand Total
     }
-    if (paymentMode === "Cash") {
-      if (cashNum > 0 && cashNum < grandTotal) return false; // Prevent underpayment in Cash mode unless marked Pending
+    if (paymentMode === "Cash" && paymentMode !== "Pending") {
+      if (cashNum > 0 && cashNum < grandTotal) return false; // Block cash underpayment for Paid status
+    }
+    if (discountAmount > 0 && !discountReason.trim() && !managerApproved) {
+      return false; // Require discount reason or manager approval
     }
     return true;
-  }, [cart, paymentMode, splitDiff, cashNum, grandTotal]);
+  }, [cart, isSubmitting, paymentMode, splitDiff, splitSum, cashNum, grandTotal, discountAmount, discountReason, managerApproved]);
 
   const handleCheckoutSubmit = (status = "Paid") => {
-    if (!canSubmit && status !== "Pending") return;
+    if ((!canSubmit && status !== "Pending") || isSubmitting) return;
+
+    setIsSubmitting(true);
 
     let finalPaymentDetails = paymentMode;
     if (paymentMode === "Split") {
@@ -113,8 +121,8 @@ export default function CheckoutPanel({
 
     const billData = {
       source: sourceTitle,
-      customerName: custName || "Guest",
-      phone,
+      customerName: custName.trim() || "Walk-in Guest",
+      phone: phone.trim(),
       items: cart.map((c) => {
         const mi = menuIdx.get(c.menuItemId);
         return {
@@ -129,7 +137,7 @@ export default function CheckoutPanel({
       discount: discountAmount,
       discountType,
       discountValue: parseFloat(discountValue) || 0,
-      discountReason: discountReason || (managerApproved ? "Manager Discount" : ""),
+      discountReason: discountReason.trim() || (managerApproved ? "Manager Discount" : ""),
       managerApproved,
       gst: gstAmount,
       roundOff,
@@ -140,7 +148,11 @@ export default function CheckoutPanel({
       paidAt: new Date().toISOString()
     };
 
-    onCompleteCheckout(billData);
+    try {
+      onCompleteCheckout(billData);
+    } finally {
+      setTimeout(() => setIsSubmitting(false), 500); // Double click protection delay
+    }
   };
 
   return (
@@ -154,8 +166,9 @@ export default function CheckoutPanel({
         <div className="flex items-center gap-2">
           {onCancel && (
             <button
+              type="button"
               onClick={onCancel}
-              className="px-3 py-1.5 text-xs rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800"
+              className="px-3.5 py-2 text-xs rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 cursor-pointer"
             >
               Cancel
             </button>
@@ -230,7 +243,7 @@ export default function CheckoutPanel({
               <button
                 type="button"
                 onClick={() => setGstOn(!gstOn)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                   gstOn ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-stone-800 text-stone-500"
                 }`}
               >
@@ -243,14 +256,14 @@ export default function CheckoutPanel({
                 <button
                   type="button"
                   onClick={() => setDiscountType("percent")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg ${discountType === "percent" ? "bg-amber-500 text-stone-950" : "text-stone-400"}`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${discountType === "percent" ? "bg-amber-500 text-stone-950" : "text-stone-400"}`}
                 >
                   %
                 </button>
                 <button
                   type="button"
                   onClick={() => setDiscountType("amount")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg ${discountType === "amount" ? "bg-amber-500 text-stone-950" : "text-stone-400"}`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${discountType === "amount" ? "bg-amber-500 text-stone-950" : "text-stone-400"}`}
                 >
                   ₹
                 </button>
@@ -271,7 +284,7 @@ export default function CheckoutPanel({
                   type="text"
                   value={discountReason}
                   onChange={(e) => setDiscountReason(e.target.value)}
-                  placeholder="Discount reason (Staff, Festival, Promo...)"
+                  placeholder="Discount reason required (e.g. Festival, Staff)"
                   className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
                 />
                 
@@ -308,7 +321,7 @@ export default function CheckoutPanel({
                   key={pm.id}
                   type="button"
                   onClick={() => setPaymentMode(pm.id)}
-                  className={`min-h-[48px] rounded-xl font-bold text-xs flex items-center justify-center gap-2 border transition active:scale-95 ${
+                  className={`min-h-[48px] rounded-xl font-bold text-xs flex items-center justify-center gap-2 border transition active:scale-95 cursor-pointer ${
                     paymentMode === pm.id
                       ? "bg-amber-500 text-stone-950 border-amber-400 shadow-md shadow-amber-500/20"
                       : "bg-stone-900 text-stone-300 border-stone-800 hover:bg-stone-800"
@@ -319,7 +332,7 @@ export default function CheckoutPanel({
               ))}
             </div>
 
-            {/* Mode-Specific Options */}
+            {/* Mode-Specific Cash Received & Validation */}
             {paymentMode === "Cash" && (
               <div className="mt-2 bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-2">
                 <label className="text-xs text-stone-400">Cash Received from Customer</label>
@@ -332,21 +345,35 @@ export default function CheckoutPanel({
                     className="flex-1 rounded-xl bg-stone-900 border border-stone-700 px-3 py-2 text-sm font-mono font-bold text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-500"
                   />
                   {cashNum > 0 && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 rounded-xl text-right">
-                      <span className="text-[10px] text-emerald-400 block uppercase font-bold">Change Due</span>
-                      <span className="text-sm font-mono font-bold text-emerald-300">{currency(cashChange)}</span>
+                    <div className={`px-3 py-2 rounded-xl text-right border ${
+                      isCashUnderpaid
+                        ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                        : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    }`}>
+                      <span className="text-[10px] block uppercase font-bold">
+                        {isCashUnderpaid ? "Short" : "Change Due"}
+                      </span>
+                      <span className="text-sm font-mono font-bold">
+                        {currency(isCashUnderpaid ? grandTotal - cashNum : cashChange)}
+                      </span>
                     </div>
                   )}
                 </div>
+                {isCashUnderpaid && (
+                  <p className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
+                    <AlertCircle size={12} /> Cash received must be at least {currency(grandTotal)}
+                  </p>
+                )}
               </div>
             )}
 
+            {/* Split Payment Options */}
             {paymentMode === "Split" && (
               <div className="mt-2 bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-2.5">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-stone-400 font-semibold">Split Breakdown</span>
-                  <span className={`text-xs font-mono font-bold ${splitDiff === 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                    {splitDiff === 0 ? "✓ Balanced" : `Diff: ${currency(splitDiff)}`}
+                  <span className={`text-xs font-mono font-bold ${Math.abs(splitDiff) < 0.01 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {Math.abs(splitDiff) < 0.01 ? "✓ Balanced" : `Diff: ${currency(splitDiff)}`}
                   </span>
                 </div>
                 
@@ -423,13 +450,19 @@ export default function CheckoutPanel({
                 <span className="text-2xl font-extrabold text-amber-400 font-serif">{currency(grandTotal)}</span>
               </div>
 
-              {/* Checkout Button */}
+              {/* Checkout Button with Double Submission Protection */}
               <PrimaryButton
-                disabled={!canSubmit}
+                disabled={!canSubmit || isSubmitting}
                 onClick={() => handleCheckoutSubmit(paymentMode === "Pending" ? "Pending" : "Paid")}
-                className="min-h-[48px] px-6 text-sm font-bold shadow-lg shadow-amber-500/20 active:scale-95"
+                className="min-h-[48px] px-6 text-sm font-bold shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
               >
-                <Check size={18} /> {paymentMode === "Pending" ? "Mark Pending" : "Complete Pay"}
+                {isSubmitting ? (
+                  <RefreshCw size={18} className="animate-spin" />
+                ) : (
+                  <>
+                    <Check size={18} /> {paymentMode === "Pending" ? "Mark Pending" : "Complete Pay"}
+                  </>
+                )}
               </PrimaryButton>
             </div>
           </Card>

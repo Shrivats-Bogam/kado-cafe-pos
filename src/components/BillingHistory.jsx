@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, DollarSign, CreditCard, QrCode, AlertCircle, RefreshCw, XCircle, Eye } from "lucide-react";
+import { Search, DollarSign, CreditCard, QrCode, AlertCircle, RefreshCw, XCircle, Eye, Receipt } from "lucide-react";
 import { Card } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
 
@@ -7,10 +7,8 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All"); // All, Paid, Pending, Cancelled, Refunded
 
-  // Calculate Daily Revenue Summary stats
+  // Calculate Daily Revenue Summary stats (PART 18)
   const dailySummary = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    
     let totalRev = 0;
     let cashTotal = 0;
     let upiTotal = 0;
@@ -21,9 +19,6 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
     let refundedTotal = 0;
 
     orderHistory.forEach((bill) => {
-      const billDate = (bill.paidAt || bill.createdAt || "").slice(0, 10);
-      const isToday = billDate === todayStr;
-
       const amt = bill.grandTotal || 0;
       discountTotal += bill.discount || 0;
 
@@ -40,7 +35,7 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
         return;
       }
 
-      // Paid / Active Revenue
+      // Paid Revenue
       totalRev += amt;
 
       const pm = (bill.paymentMode || bill.paymentMethod || "").toLowerCase();
@@ -62,7 +57,7 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
     };
   }, [orderHistory]);
 
-  // Filter & Search Orders
+  // Filter & Search Orders (PART 17)
   const filteredHistory = useMemo(() => {
     return orderHistory.filter((bill) => {
       // Status Filter
@@ -70,23 +65,24 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
         return false;
       }
 
-      // Search Query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+      // Multi-Field Search (Bill #, Customer, Phone, Source/Table, Date)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
         const matchId = String(bill.id || "").toLowerCase().includes(q);
         const matchCust = String(bill.customerName || "").toLowerCase().includes(q);
+        const matchPhone = String(bill.phone || "").toLowerCase().includes(q);
         const matchSource = String(bill.source || "").toLowerCase().includes(q);
-        const matchDate = String(bill.paidAt || "").toLowerCase().includes(q);
-        return matchId || matchCust || matchSource || matchDate;
+        const matchDate = String(bill.paidAt || bill.createdAt || "").toLowerCase().includes(q);
+        return matchId || matchCust || matchPhone || matchSource || matchDate;
       }
 
       return true;
-    }).sort((a, b) => new Date(b.paidAt || 0) - new Date(a.paidAt || 0));
+    }).sort((a, b) => new Date(b.paidAt || b.createdAt || 0) - new Date(a.paidAt || a.createdAt || 0));
   }, [orderHistory, statusFilter, searchQuery]);
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Daily Revenue Summary metrics cards */}
+      {/* Daily Revenue Summary Metrics Cards (PART 18) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <Card className="p-3 bg-stone-900 border-stone-800 flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider">Revenue</span>
@@ -136,16 +132,16 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
         </Card>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row items-center gap-3 bg-stone-900 p-3 rounded-2xl border border-stone-800">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" size={16} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" size={16} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by Bill #, Customer, Table, Parcel, Date..."
-            className="w-full bg-stone-950 border border-stone-800 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+            placeholder="Search by Bill #, Customer, Table, Phone, or Date..."
+            className="w-full bg-stone-950 border border-stone-800 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
           />
         </div>
 
@@ -154,10 +150,10 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition min-h-[44px] cursor-pointer ${
                 statusFilter === st
-                  ? "bg-amber-500 text-stone-950"
-                  : "bg-stone-800 text-stone-400 hover:bg-stone-700"
+                  ? "bg-amber-500 text-stone-950 shadow-md"
+                  : "bg-stone-950 border border-stone-800 text-stone-400 hover:bg-stone-800 hover:text-stone-200"
               }`}
             >
               {st}
@@ -167,24 +163,31 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
       </div>
 
       {/* Bill History Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredHistory.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-stone-500 text-sm">
-            No bills matching criteria found.
+      {filteredHistory.length === 0 ? (
+        /* Purposeful Empty State (PART 23) */
+        <div className="flex flex-col items-center justify-center p-12 bg-stone-900/60 border border-stone-800 rounded-3xl text-center select-none pointer-events-none my-4">
+          <div className="w-16 h-16 rounded-2xl bg-stone-800/80 border border-stone-700/50 flex items-center justify-center text-amber-500 mb-3 shadow-inner">
+            <Receipt size={32} />
           </div>
-        ) : (
-          filteredHistory.map((bill) => {
+          <h3 className="font-serif text-lg font-bold text-stone-200 mb-1">No Bills Found</h3>
+          <p className="text-xs text-stone-400 max-w-xs leading-relaxed">
+            Completed, pending, or historical transactions will appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filteredHistory.map((bill) => {
             const st = bill.status || "Paid";
             return (
-              <Card key={bill.id} className="p-4 bg-stone-900 border-stone-800 flex flex-col justify-between gap-3">
+              <Card key={bill.id} className="p-4 bg-stone-900 border-stone-800 flex flex-col justify-between gap-3 shadow-sm hover:border-stone-700 transition">
                 <div className="flex justify-between items-start">
                   <div>
                     <span className="font-mono text-xs font-bold text-amber-400">{bill.id}</span>
-                    <span className="text-[11px] text-stone-400 block mt-0.5">
-                      {new Date(bill.paidAt || bill.createdAt).toLocaleString()}
+                    <span className="text-[11px] text-stone-400 block mt-0.5 font-mono">
+                      {new Date(bill.paidAt || bill.createdAt || Date.now()).toLocaleString()}
                     </span>
                   </div>
-                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                  <span className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-full border ${
                     st === "Paid" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
                     st === "Pending" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
                     st === "Cancelled" ? "bg-rose-500/15 text-rose-400 border-rose-500/30" :
@@ -200,31 +203,34 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
                 </div>
 
                 <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-[11px] text-stone-400">{bill.paymentMode || bill.paymentMethod || "Cash"}</span>
+                  <span className="text-[11px] text-stone-400 font-medium">{bill.paymentMode || bill.paymentMethod || "Cash"}</span>
 
                   <div className="flex gap-1.5">
                     {st === "Pending" && onUpdateBillStatus && (
                       <>
                         <button
+                          type="button"
                           onClick={() => onUpdateBillStatus(bill.id, "Paid")}
-                          className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition"
-                          title="Mark Paid"
+                          className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          title="Mark Pending Bill as Paid"
                         >
-                          <RefreshCw size={14} />
+                          <RefreshCw size={12} /> Pay
                         </button>
                         <button
+                          type="button"
                           onClick={() => onUpdateBillStatus(bill.id, "Cancelled")}
-                          className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition"
-                          title="Cancel Bill"
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          title="Cancel Pending Bill"
                         >
-                          <XCircle size={14} />
+                          <XCircle size={12} /> Cancel
                         </button>
                       </>
                     )}
 
                     <button
+                      type="button"
                       onClick={() => onSelectBill(bill)}
-                      className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium flex items-center gap-1 transition"
+                      className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
                     >
                       <Eye size={14} /> View
                     </button>
@@ -232,9 +238,9 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
                 </div>
               </Card>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }
