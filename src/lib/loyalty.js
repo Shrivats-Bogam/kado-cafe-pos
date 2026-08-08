@@ -3,30 +3,41 @@
 import { indexById } from "./menuIndex.js";
 
 /**
- * Apply loyalty points to the customer list for a paid order.
- * Rule: 1 point earned per ₹20 spent; redeem any number of points (1 point = ₹1).
- * If customer with that phone doesn't exist, create them (name = phone).
- *
- * @param {Array} customers — existing customers list
- * @param {string} phone — phone number (min 6 chars to qualify)
- * @param {number} amountSpent — final amount paid (after discount, before points redemption)
- * @param {number} pointsToRedeem — points being redeemed this order
- * @returns {{ customers: Array, customerId: string|null }}
+ * Calculate membership tier based on lifetime spend.
+ * Default thresholds: Gold = ₹10,000, Platinum = ₹50,000.
  */
-export function calculateMembershipTier(lifetimeSpend = 0) {
-  if (lifetimeSpend >= 50000) return "Platinum";
-  if (lifetimeSpend >= 10000) return "Gold";
+export function calculateMembershipTier(lifetimeSpend = 0, thresholds = { Gold: 10000, Platinum: 50000 }) {
+  const goldLimit = thresholds?.Gold || 10000;
+  const platLimit = thresholds?.Platinum || 50000;
+
+  if (lifetimeSpend >= platLimit) return "Platinum";
+  if (lifetimeSpend >= goldLimit) return "Gold";
   return "Silver";
 }
 
-export function applyLoyalty(customers, phone, amountSpent, pointsToRedeem = 0) {
-  if (!phone || phone.length < 6) {
+/**
+ * Apply loyalty points to the customer list for a paid order.
+ * Rule: 1 point earned per ₹X spent (default ₹20 = 1 pt).
+ *
+ * @param {Array} customers — existing customers list
+ * @param {string} phone — phone number (min 6 chars to qualify)
+ * @param {number} amountSpent — final amount paid
+ * @param {number} pointsToRedeem — points being redeemed this order
+ * @param {Object} settings — optional configurable loyalty settings { earnRate, tierThresholds }
+ * @returns {{ customers: Array, customerId: string|null }}
+ */
+export function applyLoyalty(customers = [], phone = "", amountSpent = 0, pointsToRedeem = 0, settings = {}) {
+  const cleanPhone = String(phone).replace(/\D/g, "").slice(0, 10);
+  if (!cleanPhone || cleanPhone.length < 6) {
     return { customers, customerId: null };
   }
 
+  const earnRate = settings.earnRate || 20; // default: 1 point per ₹20 spent
+  const thresholds = settings.tierThresholds || { Gold: 10000, Platinum: 50000 };
+
   const spent = Math.max(0, amountSpent || 0);
-  const earned = Math.floor(spent / 20); // 1 point per ₹20 spent
-  const existing = customers.find((c) => c.phone === phone);
+  const earned = Math.floor(spent / earnRate);
+  const existing = customers.find((c) => String(c.phone).replace(/\D/g, "").slice(0, 10) === cleanPhone);
 
   if (existing) {
     const newLifetimeSpend = (existing.lifetimeSpend || 0) + spent;
@@ -35,7 +46,7 @@ export function applyLoyalty(customers, phone, amountSpent, pointsToRedeem = 0) 
       totalOrders: (existing.totalOrders || 0) + 1,
       totalVisits: (existing.totalVisits || existing.totalOrders || 0) + 1,
       lifetimeSpend: newLifetimeSpend,
-      membership: calculateMembershipTier(newLifetimeSpend),
+      membership: calculateMembershipTier(newLifetimeSpend, thresholds),
       points: Math.max(0, (existing.points || 0) - (pointsToRedeem || 0)) + earned,
       lastVisit: new Date().toISOString(),
     };
@@ -47,8 +58,8 @@ export function applyLoyalty(customers, phone, amountSpent, pointsToRedeem = 0) 
 
   const created = {
     id: "c" + Date.now(),
-    name: phone,
-    phone,
+    name: `Customer (${cleanPhone})`,
+    phone: cleanPhone,
     birthday: "",
     anniversary: "",
     address: "",
@@ -56,7 +67,7 @@ export function applyLoyalty(customers, phone, amountSpent, pointsToRedeem = 0) 
     totalOrders: 1,
     totalVisits: 1,
     lifetimeSpend: spent,
-    membership: calculateMembershipTier(spent),
+    membership: calculateMembershipTier(spent, thresholds),
     points: earned,
     lastVisit: new Date().toISOString(),
   };
@@ -71,26 +82,32 @@ export function daysUntilBirthday(birthday) {
   if (!birthday) return null;
   const today = new Date();
   const bday = new Date(birthday);
+  if (isNaN(bday.getTime())) return null;
+
   const next = new Date(today.getFullYear(), bday.getMonth(), bday.getDate());
   if (next < today) next.setFullYear(today.getFullYear() + 1);
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
 
 /**
- * Aggregate the customer's most-ordered item across the order history.
+ * Aggregate the customer's top 5 favorite items across historical orders.
  */
-export function favoriteItem(customerId, orderHistory, menuItems) {
+export function topFavoriteItems(customerId, orderHistory = [], menuItems = []) {
   const idx = indexById(menuItems);
   const counts = {};
+
   orderHistory
-    .filter((o) => o.customerId === customerId)
+    .filter((o) => o.customerId === customerId || (o.phone && o.phone.length >= 6))
     .forEach((o) =>
       (o.items || []).forEach((it) => {
         const mi = idx.get(it.menuItemId);
-        const name = mi ? mi.name : it.menuItemId;
-        counts[name] = (counts[name] || 0) + it.qty;
+        const name = mi ? mi.name : (it.name || it.menuItemId);
+        counts[name] = (counts[name] || 0) + (it.qty || 1);
       })
     );
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  return sorted[0]?.[0];
+
+  return Object.entries(counts)
+    .map(([name, qty]) => ({ name, qty }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 5);
 }

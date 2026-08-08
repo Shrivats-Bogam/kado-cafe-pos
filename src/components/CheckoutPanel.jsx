@@ -201,7 +201,15 @@ export default function CheckoutPanel({
 
           {/* Customer & Loyalty Panel */}
           <Card className="p-4 bg-stone-900/60 border border-stone-800 flex flex-col gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-400">Customer & Loyalty</h3>
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-400">Customer & Loyalty</h3>
+              {phone.length >= 6 && !matchedCustomer && (
+                <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
+                  New Customer
+                </span>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input
                 type="text"
@@ -218,6 +226,17 @@ export default function CheckoutPanel({
                 className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
               />
             </div>
+
+            {matchedCustomer && (
+              <div className="flex items-center justify-between text-xs bg-stone-950 p-2.5 rounded-xl border border-stone-800">
+                <span className="text-stone-300 font-medium">
+                  {matchedCustomer.name} ({matchedCustomer.membership || "Silver"})
+                </span>
+                <span className="text-purple-400 font-mono font-bold">
+                  {matchedCustomer.points || 0} pts
+                </span>
+              </div>
+            )}
 
             {matchedCustomer && matchedCustomer.points > 0 && (
               <label className="flex items-center justify-between rounded-xl bg-amber-500/10 border border-amber-600/30 p-2.5 text-xs text-amber-300 cursor-pointer">
