@@ -28,6 +28,28 @@ export function minutesSince(iso) {
 }
 
 /**
+ * Intelligently format elapsed time:
+ * - 0-59 min: e.g. "18 min"
+ * - 60+ min: e.g. "1h 10m"
+ * - 24h+: e.g. "1d 2h"
+ */
+export function formatElapsedTime(iso) {
+  if (!iso) return "";
+  const diffMins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (diffMins < 60) {
+    return `${diffMins} min`;
+  }
+  const hours = Math.floor(diffMins / 60);
+  const remainingMins = diffMins % 60;
+  if (hours < 24) {
+    return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+}
+
+/**
  * Compute order totals across a cart.
  * @param {Array<{menuItemId, qty}>} cart
  * @param {Array<{id, price}>} menuItems

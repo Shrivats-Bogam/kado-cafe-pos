@@ -22,6 +22,9 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
   const nextTables = state.tables.map((t) => {
     if (t.id !== tableId) return t;
 
+    const newPriority = opts.priority || t.priority || "Normal";
+    const orderNotes = opts.orderNotes !== undefined ? opts.orderNotes : (t.orderNotes || "");
+
     // Calculate item quantities already sent to kitchen across previous tickets
     const sentQtyMap = {};
     (t.kitchenTickets || []).forEach((ticket) => {
@@ -44,8 +47,13 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
       }
     });
 
+    // Update existing tickets priority if Rush status changed
+    let updatedTickets = (t.kitchenTickets || []).map((ticket) => ({
+      ...ticket,
+      priority: newPriority,
+    }));
+
     // Create a new kitchen ticket if there are delta items
-    let updatedTickets = t.kitchenTickets ? [...t.kitchenTickets] : [];
     if (deltaItems.length > 0) {
       const newTicket = {
         id: makeId("kt"),
@@ -53,9 +61,10 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
         tableNumber: t.number,
         customerName: customerName || t.customerName || `Table ${t.number}`,
         items: deltaItems,
+        notes: orderNotes,
         status: "New",
         createdAt: new Date().toISOString(),
-        priority: opts.priority || t.priority || "Normal",
+        priority: newPriority,
       };
       updatedTickets.push(newTicket);
     } else if (items.length === 0) {
@@ -63,18 +72,19 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
     }
 
     const activeTickets = updatedTickets.filter((ticket) => ticket.status !== "Served");
-    const nextKitchenStatus = activeTickets.length > 0 ? activeTickets[activeTickets.length - 1].status : "Served";
+    const nextKitchenStatus = activeTickets.length > 0 ? activeTickets[activeTickets.length - 1].status : (items.length > 0 ? "Served" : "New");
 
     return {
       ...t,
       items,
       customerName,
+      orderNotes,
       status: items.length === 0 ? "available" : (t.status === "available" ? "preparing" : t.status),
       startedAt: t.startedAt || (items.length > 0 ? new Date().toISOString() : null),
       kitchenTickets: updatedTickets,
       kitchenStatus: nextKitchenStatus,
-      priority: opts.priority || t.priority || "Normal",
-      priorityAt: opts.priority === "Rush" ? new Date().toISOString() : t.priorityAt,
+      priority: newPriority,
+      priorityAt: newPriority === "Rush" ? (t.priorityAt || new Date().toISOString()) : null,
     };
   });
   return { ...state, tables: nextTables };
@@ -100,8 +110,16 @@ export function generateBillForTable(state, tableId, items, customerName, totals
       paidAt: new Date().toISOString(),
     }],
     tables: state.tables.map((t) => (t.id === tableId ? {
-      ...t, status: "available", items: [], kitchenTickets: [], customerName: "", startedAt: null,
-      kitchenStatus: "New", priority: "Normal", priorityAt: null,
+      ...t,
+      status: "available",
+      items: [],
+      kitchenTickets: [],
+      customerName: "",
+      orderNotes: "",
+      startedAt: null,
+      kitchenStatus: "New",
+      priority: "Normal",
+      priorityAt: null,
     } : t)),
   };
 }
@@ -113,8 +131,14 @@ export function setTableStatus(state, tableId, status) {
       ...t,
       status,
       ...(status === "available" ? {
-        items: [], kitchenTickets: [], customerName: "", startedAt: null,
-        kitchenStatus: "New", priority: "Normal", priorityAt: null,
+        items: [],
+        kitchenTickets: [],
+        customerName: "",
+        orderNotes: "",
+        startedAt: null,
+        kitchenStatus: "New",
+        priority: "Normal",
+        priorityAt: null,
       } : {}),
     } : t)),
   };
@@ -350,19 +374,66 @@ export function setTableCleaning(state, tableId) {
 
 export function duplicateTableOrder(state, sourceTableId, targetTableId) {
   const sourceTable = state.tables.find((t) => t.id === sourceTableId);
-  if (!sourceTable || !sourceTable.items.length) return state;
+  if (!sourceTable || !sourceTable.items || sourceTable.items.length === 0) return state;
 
   return {
     ...state,
-    tables: state.tables.map((t) => (t.id === targetTableId ? {
-      ...t,
-      items: sourceTable.items.map((i) => ({ ...i })),
-      customerName: sourceTable.customerName || t.customerName,
-      status: "preparing",
-      startedAt: new Date().toISOString(),
-      kitchenStatus: "New",
-      priority: sourceTable.priority || "Normal",
-    } : t)),
+    tables: state.tables.map((t) => {
+      if (t.id === targetTableId) {
+        return {
+          ...t,
+          status: "preparing",
+          items: [...sourceTable.items],
+          customerName: sourceTable.customerName || t.customerName,
+          orderNotes: sourceTable.orderNotes || t.orderNotes || "",
+          startedAt: new Date().toISOString(),
+          kitchenStatus: sourceTable.kitchenStatus || "New",
+          priority: sourceTable.priority || "Normal",
+          priorityAt: sourceTable.priorityAt || null,
+        };
+      }
+      return t;
+    }),
+  };
+}
+
+export function addTable(state, table) {
+  const newTable = {
+    id: table.id || `t_${Date.now()}`,
+    number: Number(table.number || state.tables.length + 1),
+    name: table.name || `Table ${table.number}`,
+    capacity: Number(table.capacity || 4),
+    type: table.type || table.area || "Indoor",
+    area: table.area || table.type || "Indoor",
+    shape: table.shape || "square",
+    qrEnabled: table.qrEnabled !== false,
+    notes: table.notes || "",
+    status: "available",
+    items: [],
+    kitchenTickets: [],
+    customerName: "",
+    orderNotes: "",
+    startedAt: null,
+    kitchenStatus: "New",
+    priority: "Normal",
+    priorityAt: null,
+    x: table.x ?? (Number(table.number || state.tables.length + 1) % 4) * 180 + 20,
+    y: table.y ?? Math.floor(Number(table.number || state.tables.length + 1) / 4) * 160 + 20,
+  };
+  return { ...state, tables: [...state.tables, newTable] };
+}
+
+export function editTable(state, tableId, patch) {
+  return {
+    ...state,
+    tables: state.tables.map((t) => (t.id === tableId ? { ...t, ...patch } : t)),
+  };
+}
+
+export function deleteTable(state, tableId) {
+  return {
+    ...state,
+    tables: state.tables.filter((t) => t.id !== tableId),
   };
 }
 

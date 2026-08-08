@@ -210,6 +210,9 @@ export default function StaffApp() {
   const reserveTable = (tableId, name, count) => update((s) => actions.reserveTable(s, tableId, name, count));
   const setTableCleaning = (tableId) => update((s) => actions.setTableCleaning(s, tableId));
   const duplicateTableOrder = (sourceId, targetId) => update((s) => actions.duplicateTableOrder(s, sourceId, targetId));
+  const addTable = (tableData) => update((s) => actions.addTable(s, tableData));
+  const editTable = (tableId, patch) => update((s) => actions.editTable(s, tableId, patch));
+  const deleteTable = (tableId) => update((s) => actions.deleteTable(s, tableId));
 
   const cycleKitchen = (kind, id, newStatus) =>
     update((s) => actions.cycleKitchen(s, kind, id, newStatus));
@@ -332,6 +335,9 @@ export default function StaffApp() {
               onReserveTable={reserveTable}
               onSetCleaning={setTableCleaning}
               onDuplicateOrder={duplicateTableOrder}
+              onAddTable={addTable}
+              onEditTable={editTable}
+              onDeleteTable={deleteTable}
             />
           )}
           {tab === "kitchen" && (
