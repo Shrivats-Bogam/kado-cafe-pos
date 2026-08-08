@@ -230,6 +230,13 @@ export default function StaffApp() {
   const addMenuItem = (item) => update((s) => actions.addMenuItem(s, item));
   const editMenuItem = (id, patch) => update((s) => actions.editMenuItem(s, id, patch));
   const deleteMenuItem = (id) => update((s) => actions.deleteMenuItem(s, id));
+  const duplicateMenuItem = (id) => update((s) => actions.duplicateMenuItem(s, id));
+  const reorderMenuItems = (items) => update((s) => actions.reorderMenuItems(s, items));
+
+  const addCategory = (cat) => update((s) => actions.addCategory(s, cat));
+  const editCategory = (oldName, newName) => update((s) => actions.editCategory(s, oldName, newName));
+  const deleteCategory = (cat) => update((s) => actions.deleteCategory(s, cat));
+  const reorderCategories = (cats) => update((s) => actions.reorderCategories(s, cats));
 
   const addCustomer = (customer) => update((s) => actions.addCustomer(s, customer));
   const deleteCustomer = (id) => update((s) => actions.deleteCustomer(s, id));
@@ -362,9 +369,16 @@ export default function StaffApp() {
           {tab === "menu" && (
             <MenuManageView
               menuItems={state.menuItems}
+              categories={state.categories}
               onAdd={addMenuItem}
               onEdit={editMenuItem}
               onDelete={deleteMenuItem}
+              onDuplicate={duplicateMenuItem}
+              onReorderItems={reorderMenuItems}
+              onAddCategory={addCategory}
+              onEditCategory={editCategory}
+              onDeleteCategory={deleteCategory}
+              onReorderCategories={reorderCategories}
             />
           )}
           {tab === "customers" && (

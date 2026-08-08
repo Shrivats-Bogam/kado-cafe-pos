@@ -153,7 +153,18 @@ export default function TableOrderScreen({ table, menuItems, customers, onClose,
             Clear Cart
           </button>
           <button
+            type="button"
             onClick={() => {
+              // PART 20: Validate that no item in cart is unavailable
+              const unavailableCartItem = cart.find((item) => {
+                const mi = menuItems.find((m) => m.id === item.menuItemId);
+                return mi && mi.available === false;
+              });
+              if (unavailableCartItem) {
+                const mi = menuItems.find((m) => m.id === unavailableCartItem.menuItemId);
+                alert(`"${mi?.name || "Item"}" is no longer available. Please remove it from the cart to proceed.`);
+                return;
+              }
               onSave(cart, customerName, { priority, orderNotes });
               onClose();
             }}

@@ -16,6 +16,7 @@ export function CustomerMenuPicker({ menuItems, cart, setCart, t }) {
 
   const filtered = useMemo(() => {
     return menuItems.filter((m) => {
+      if (m.available === false) return false;
       const matchCat = selectedCat === "All" || (m.category || "General") === selectedCat;
       const matchSearch = m.name.toLowerCase().includes(search.toLowerCase()) ||
         (m.description && m.description.toLowerCase().includes(search.toLowerCase()));

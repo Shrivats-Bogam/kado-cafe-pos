@@ -479,18 +479,79 @@ export function deleteParcel(state, id) {
   return { ...state, parcels: state.parcels.filter((p) => p.id !== id) };
 }
 
-// --- Menu -----------------------------------------------------------------
+// --- Menu & Categories ---------------------------------------------------
 
 export function addMenuItem(state, item) {
-  return { ...state, menuItems: [...state.menuItems, item] };
+  const newItem = {
+    id: item.id || `m_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    name: item.name,
+    category: item.category || "General",
+    price: Number(item.price) || 0,
+    available: item.available !== undefined ? item.available : true,
+    description: item.description || "",
+    isVeg: item.isVeg !== undefined ? item.isVeg : true,
+    displayOrder: item.displayOrder || (state.menuItems || []).length + 1,
+  };
+  return { ...state, menuItems: [...(state.menuItems || []), newItem] };
 }
 
 export function editMenuItem(state, id, patch) {
-  return { ...state, menuItems: state.menuItems.map((m) => (m.id === id ? { ...m, ...patch } : m)) };
+  return {
+    ...state,
+    menuItems: (state.menuItems || []).map((m) => (m.id === id ? { ...m, ...patch } : m)),
+  };
 }
 
 export function deleteMenuItem(state, id) {
-  return { ...state, menuItems: state.menuItems.filter((m) => m.id !== id) };
+  return {
+    ...state,
+    menuItems: (state.menuItems || []).filter((m) => m.id !== id),
+  };
+}
+
+export function duplicateMenuItem(state, id) {
+  const target = (state.menuItems || []).find((m) => m.id === id);
+  if (!target) return state;
+  const newItem = {
+    ...target,
+    id: `m_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    name: `${target.name} Copy`,
+    displayOrder: (target.displayOrder || 0) + 1,
+  };
+  return { ...state, menuItems: [...(state.menuItems || []), newItem] };
+}
+
+export function reorderMenuItems(state, newMenuItems) {
+  return { ...state, menuItems: newMenuItems };
+}
+
+export function addCategory(state, catName) {
+  const name = catName ? catName.trim() : "";
+  if (!name) return state;
+  const currentCats = state.categories || [];
+  if (currentCats.includes(name)) return state;
+  return { ...state, categories: [...currentCats, name] };
+}
+
+export function editCategory(state, oldName, newName) {
+  const cleanNewName = newName ? newName.trim() : "";
+  if (!cleanNewName || oldName === cleanNewName) return state;
+  const currentCats = state.categories || [];
+  const nextCats = currentCats.map((c) => (c === oldName ? cleanNewName : c));
+  const nextItems = (state.menuItems || []).map((m) =>
+    m.category === oldName ? { ...m, category: cleanNewName } : m
+  );
+  return { ...state, categories: nextCats, menuItems: nextItems };
+}
+
+export function deleteCategory(state, catName) {
+  const currentCats = state.categories || [];
+  const nextCats = currentCats.filter((c) => c !== catName);
+  return { ...state, categories: nextCats };
+}
+
+export function reorderCategories(state, newCategories) {
+  return { ...state, categories: newCategories };
 }
 
 export function addCustomer(state, customer) {
