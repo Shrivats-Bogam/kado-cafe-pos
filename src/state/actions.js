@@ -91,14 +91,21 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
 }
 
 export function generateBillForTable(state, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints) {
+  const billId = makeId("o");
   const finalTotal = Math.max(0, totals.grandTotal - (redeemedPoints || 0));
-  const { customers, customerId } = applyLoyalty(state.customers, phone, finalTotal, redeemedPoints || 0);
+  const { customers, customerId } = applyLoyalty(state.customers, phone, finalTotal, redeemedPoints || 0, state.settings || {}, billId, state.orderHistory || []);
   const tableNo = state.tables.find((t) => t.id === tableId)?.number;
+
+  // Deduct inventory stock for table order items
+  const deducted = deductStockForOrderItems(state.inventory || [], state.recipes || {}, state.inventoryLogs || [], items, billId);
+
   return {
     ...state,
     customers,
-    orderHistory: [...state.orderHistory, {
-      id: makeId("o"),
+    inventory: deducted.inventory,
+    inventoryLogs: deducted.inventoryLogs,
+    orderHistory: [...(state.orderHistory || []), {
+      id: billId,
       source: `Table ${tableNo}`,
       customerName,
       customerId,
@@ -107,6 +114,7 @@ export function generateBillForTable(state, tableId, items, customerName, totals
       grandTotal: finalTotal,
       pointsRedeemed: redeemedPoints || 0,
       paymentMode,
+      status: "Paid",
       paidAt: new Date().toISOString(),
     }],
     tables: state.tables.map((t) => (t.id === tableId ? {
@@ -592,6 +600,11 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
   let nextInventory = [...(inventory || [])];
   let nextLogs = [...(inventoryLogs || [])];
 
+  // IDEMPOTENCY GUARD: Skip duplicate inventory deductions for the same order reference
+  if (orderId && nextLogs.some((l) => l.orderRef === orderId && l.type === "Sale")) {
+    return { inventory: nextInventory, inventoryLogs: nextLogs };
+  }
+
   items.forEach((item) => {
     const menuItemId = item.menuItemId;
     const itemQty = item.qty || 1;
@@ -612,6 +625,7 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
 
           nextLogs.unshift({
             id: makeId("log"),
+            orderRef: orderId,
             ingredientId: invItem.id,
             ingredientName: invItem.name,
             type: "Sale",
@@ -628,6 +642,7 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
       // PART 27: Log warning for item with no recipe configured without breaking payment
       nextLogs.unshift({
         id: makeId("log"),
+        orderRef: orderId,
         ingredientId: "-",
         ingredientName: item.name || "Item",
         type: "Warning",

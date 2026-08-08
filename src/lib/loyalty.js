@@ -26,10 +26,16 @@ export function calculateMembershipTier(lifetimeSpend = 0, thresholds = { Gold: 
  * @param {Object} settings — optional configurable loyalty settings { earnRate, tierThresholds }
  * @returns {{ customers: Array, customerId: string|null }}
  */
-export function applyLoyalty(customers = [], phone = "", amountSpent = 0, pointsToRedeem = 0, settings = {}) {
+export function applyLoyalty(customers = [], phone = "", amountSpent = 0, pointsToRedeem = 0, settings = {}, billRef = "", orderHistory = []) {
   const cleanPhone = String(phone).replace(/\D/g, "").slice(0, 10);
   if (!cleanPhone || cleanPhone.length < 6) {
     return { customers, customerId: null };
+  }
+
+  // IDEMPOTENCY GUARD: One bill reference -> Maximum ONE loyalty award
+  if (billRef && Array.isArray(orderHistory) && orderHistory.some((o) => o.id === billRef)) {
+    const existingCust = customers.find((c) => String(c.phone).replace(/\D/g, "").slice(0, 10) === cleanPhone);
+    return { customers, customerId: existingCust ? existingCust.id : null };
   }
 
   const earnRate = settings.earnRate || 20; // default: 1 point per ₹20 spent
