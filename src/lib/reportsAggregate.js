@@ -235,26 +235,41 @@ export function aggregatePaymentBreakdown(orders = []) {
 
   orders.forEach((o) => {
     const total = Number(o.grandTotal) || 0;
-    const modeStr = String(o.paymentMode || "Cash");
 
     if (o.status === "Pending") {
       modes.Pending.count++;
       modes.Pending.amount += total;
-    } else if (modeStr.includes("Split")) {
+      return;
+    }
+
+    if (o.status !== "Paid") return;
+
+    if (Array.isArray(o.paymentBreakdown) && o.paymentBreakdown.length > 0) {
       modes.Split.count++;
-      modes.Split.amount += total;
-      totalAmount += total;
-    } else if (modeStr.includes("UPI") || modeStr.includes("QR")) {
-      modes.UPI.count++;
-      modes.UPI.amount += total;
-      totalAmount += total;
-    } else if (modeStr.includes("Card")) {
-      modes.Card.count++;
-      modes.Card.amount += total;
+      o.paymentBreakdown.forEach((p) => {
+        const amt = Number(p.amount) || 0;
+        const m = String(p.method || "Cash").toUpperCase();
+        if (m.includes("UPI") || m.includes("QR")) {
+          modes.UPI.amount += amt;
+        } else if (m.includes("CARD")) {
+          modes.Card.amount += amt;
+        } else {
+          modes.Cash.amount += amt;
+        }
+      });
       totalAmount += total;
     } else {
-      modes.Cash.count++;
-      modes.Cash.amount += total;
+      const modeStr = String(o.paymentMode || "Cash").toUpperCase();
+      if (modeStr.includes("UPI") || modeStr.includes("QR")) {
+        modes.UPI.count++;
+        modes.UPI.amount += total;
+      } else if (modeStr.includes("CARD")) {
+        modes.Card.count++;
+        modes.Card.amount += total;
+      } else {
+        modes.Cash.count++;
+        modes.Cash.amount += total;
+      }
       totalAmount += total;
     }
   });

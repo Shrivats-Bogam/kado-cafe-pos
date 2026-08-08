@@ -444,11 +444,15 @@ export function editTable(state, tableId, patch) {
   };
 }
 
-export function deleteTable(state, tableId) {
+export function archiveTable(state, tableId) {
   return {
     ...state,
-    tables: state.tables.filter((t) => t.id !== tableId),
+    tables: (state.tables || []).map((t) => (t.id === tableId ? { ...t, status: "archived" } : t)),
   };
+}
+
+export function deleteTable(state, tableId) {
+  return archiveTable(state, tableId);
 }
 
 // --- Parcels --------------------------------------------------------------
@@ -733,6 +737,51 @@ export function updateBillStatus(state, billId, newStatus) {
     inventory: nextInventory,
     inventoryLogs: nextLogs,
     orderHistory: nextHistory
+  };
+}
+
+export function generatePendingBill(state, pendingData) {
+  const billId = pendingData.id || makeId("pb");
+  const newPendingBill = {
+    id: billId,
+    tableId: pendingData.tableId || null,
+    source: pendingData.source || "POS Order",
+    customerName: pendingData.customerName || "Walk-in",
+    items: pendingData.items || [],
+    subtotal: pendingData.subtotal || 0,
+    discount: pendingData.discount || 0,
+    gst: pendingData.gst || 0,
+    grandTotal: pendingData.grandTotal || 0,
+    status: "PENDING",
+    createdAt: new Date().toISOString(),
+  };
+
+  return {
+    ...state,
+    pendingBills: [newPendingBill, ...(state.pendingBills || []).filter(b => b.id !== billId)]
+  };
+}
+
+export function payPendingBill(state, pendingBillId, paymentMode = "Cash", splitBreakdown = null) {
+  const pendingBill = (state.pendingBills || []).find(b => b.id === pendingBillId);
+  if (!pendingBill) return state;
+
+  const paidBill = {
+    ...pendingBill,
+    status: "Paid",
+    paymentMode: Array.isArray(splitBreakdown) ? "Split" : paymentMode,
+    paymentBreakdown: Array.isArray(splitBreakdown) ? splitBreakdown : [{ method: paymentMode, amount: pendingBill.grandTotal }],
+    paidAt: new Date().toISOString(),
+  };
+
+  const deducted = deductStockForOrderItems(state.inventory || [], state.recipes || {}, state.inventoryLogs || [], pendingBill.items || [], pendingBillId);
+
+  return {
+    ...state,
+    inventory: deducted.inventory,
+    inventoryLogs: deducted.inventoryLogs,
+    pendingBills: (state.pendingBills || []).filter(b => b.id !== pendingBillId),
+    orderHistory: [paidBill, ...(state.orderHistory || [])]
   };
 }
 

@@ -298,5 +298,6 @@ export function defaultState() {
     inventory: defaultInventory(),
     recipes: defaultRecipes(),
     inventoryLogs: [],
+    pendingBills: [],
   };
 }

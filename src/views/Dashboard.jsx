@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+
 import {
   BarChart3, ShoppingCart, Coffee, AlertTriangle, ChefHat, LayoutDashboard,
   Package, Users, Menu as MenuIcon, ArrowRight, ShieldAlert, CheckCircle2,
@@ -71,7 +72,7 @@ export default function Dashboard({ state = {}, onNavigate, currentUser }) {
   // 3. Operational Real-Time States
   const availableTables = useMemo(() => tables.filter((t) => t.status === "available").length, [tables]);
   const occupiedTables = useMemo(() => tables.filter((t) => t.status === "occupied" || t.status === "ordered" || t.status === "served").length, [tables]);
-  const pendingBillsCount = useMemo(() => tables.filter((t) => t.status === "payment_pending").length + todayRev.pendingCount, [tables, todayRev]);
+  const pendingBillsCount = useMemo(() => tables.filter((t) => t.status === "payment_pending").length + (state.pendingBills || []).length + todayRev.pendingCount, [tables, state.pendingBills, todayRev]);
 
   const kitchenWaiting = useMemo(() => kitchenTickets.filter((t) => t.status === "waiting" || t.status === "queued").length, [kitchenTickets]);
   const kitchenCooking = useMemo(() => kitchenTickets.filter((t) => t.status === "cooking" || t.status === "preparing").length, [kitchenTickets]);
@@ -516,25 +517,25 @@ export default function Dashboard({ state = {}, onNavigate, currentUser }) {
         </div>
 
         {recentOrders.length === 0 ? (
-          <p className="text-xs text-stone-500 py-4 text-center">No transactions recorded today.</p>
-        ) : (
-          <div className="space-y-2">
-            {recentOrders.map((o) => (
-              <div key={o.id} className="flex justify-between items-center text-xs bg-stone-950 p-2.5 rounded-xl border border-stone-800">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-amber-400">{o.id}</span>
-                  <span className="text-stone-300 font-medium">{o.source || "POS Order"}{o.customerName ? ` · ${o.customerName}` : ""}</span>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono font-bold text-stone-100 block">{currency(o.grandTotal)}</span>
-                  <span className="text-[10px] text-stone-500 font-mono">
-                    {new Date(o.paidAt || o.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+  <p className="text-xs text-stone-500 py-4 text-center">No transactions recorded today.</p>
+) : (
+  <div className="space-y-2">
+    {recentOrders.map((o) => (
+      <div key={o.id} className="flex justify-between items-center text-xs bg-stone-950 p-2.5 rounded-xl border border-stone-800">
+        <div className="flex items-center gap-2">
+          <span className="font-mono font-bold text-amber-400">{o.id}</span>
+          <span className="text-stone-300 font-medium">{o.source || "POS Order"}{o.customerName ? ` · ${o.customerName}` : ""}</span>
+        </div>
+        <div className="text-right">
+          <span className="font-mono font-bold text-stone-100 block">{currency(o.grandTotal)}</span>
+          <span className="text-[10px] text-stone-500 font-mono">
+            {new Date(o.paidAt || o.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
       </Card>
     </div>
   );

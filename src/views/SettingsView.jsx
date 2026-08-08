@@ -491,6 +491,85 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
             </div>
           )}
 
+          {/* Section: Menu Preferences */}
+          {activeSection === "menu" && (
+            <div className="space-y-4 text-xs">
+              <h3 className="text-sm font-bold text-stone-100 border-b border-stone-800 pb-2 flex items-center gap-2">
+                <MenuIcon size={16} className="text-amber-500" /> Menu Preferences & Display Rules
+              </h3>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-stone-300 font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.showUnavailableItemsToStaff !== false}
+                    onChange={(e) => handleChange("showUnavailableItemsToStaff", e.target.checked)}
+                    disabled={!isOwner}
+                    className="accent-amber-500 rounded"
+                  />
+                  <span>Show 86'd / Unavailable Items in Staff Order Screen (Greyed out)</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-stone-300 font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.showUnavailableItemsToCustomers === true}
+                    onChange={(e) => handleChange("showUnavailableItemsToCustomers", e.target.checked)}
+                    disabled={!isOwner}
+                    className="accent-amber-500 rounded"
+                  />
+                  <span>Show Unavailable Items in QR Customer Menu</span>
+                </label>
+
+                <div>
+                  <label className="text-stone-400 block mb-1 font-semibold">Default Menu Category</label>
+                  <input
+                    type="text"
+                    value={form.defaultMenuCategory || "All"}
+                    onChange={(e) => handleChange("defaultMenuCategory", e.target.value)}
+                    disabled={!isOwner}
+                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section: Inventory Safety */}
+          {activeSection === "inventory" && (
+            <div className="space-y-4 text-xs">
+              <h3 className="text-sm font-bold text-stone-100 border-b border-stone-800 pb-2 flex items-center gap-2">
+                <Package size={16} className="text-amber-500" /> Inventory Safety & Auto-Deduction Rules
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-stone-400 block mb-1 font-semibold">Default Minimum Stock Warning Threshold</label>
+                  <input
+                    type="number"
+                    value={form.defaultMinStockThreshold || 5}
+                    onChange={(e) => handleChange("defaultMinStockThreshold", Number(e.target.value))}
+                    disabled={!isOwner}
+                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 text-xs focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2 text-stone-300 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.stockWarningNotify !== false}
+                      onChange={(e) => handleChange("stockWarningNotify", e.target.checked)}
+                      disabled={!isOwner}
+                      className="accent-amber-500 rounded"
+                    />
+                    <span>Show Low Stock Banner Alerts on Dashboard</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Section 6: CRM & Loyalty Rules */}
           {activeSection === "loyalty" && (
             <div className="space-y-4 text-xs">

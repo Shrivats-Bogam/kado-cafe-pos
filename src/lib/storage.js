@@ -18,6 +18,7 @@
 // `saveChain` ref that used to live inside StaffApp.jsx.
 
 import { createClient } from "@supabase/supabase-js";
+import { getOrganizationId, tagTenantOwnership } from "./multitenant.js";
 
 // Schema version we tag every write with. Bump only when the on-wire shape
 // changes meaningfully. Existing reads without `_v` are treated as v0.
@@ -53,10 +54,10 @@ if (
   console.info("[kado-cafe] Using localStorage (Supabase keys not configured)");
 }
 
-// Tag payload with the current schema version without mutating caller's object.
+// Tag payload with the current schema version and tenant organization ownership.
 // Existing state reads (missing _v) are accepted on read; we just re-tag writes.
 function tagWithVersion(obj) {
-  return { ...obj, _v: SCHEMA_VERSION };
+  return tagTenantOwnership({ ...obj, _v: SCHEMA_VERSION }, getOrganizationId());
 }
 
 function stripVersionForCompare(obj) {

@@ -26,6 +26,7 @@ import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
 import { fireStatusToasts } from "../state/kitchenRealtime.js";
+import { initializeAuthSession, logoutUser } from "../lib/auth.js";
 import * as actions from "../state/actions.js";
 
 const TABS = [
@@ -60,6 +61,7 @@ export default function StaffApp() {
   useEffect(() => {
     (async () => {
       try {
+        await initializeAuthSession();
         const json = await getState();
         const next = json ? { ...defaultState(), ...JSON.parse(json) } : defaultState();
 

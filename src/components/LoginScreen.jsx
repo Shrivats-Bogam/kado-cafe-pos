@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { Coffee, ArrowLeft, Delete } from "lucide-react";
-import { Pill, IconButton } from "./ui.jsx";
+import { Coffee, ArrowLeft, Delete, KeyRound, UserCheck } from "lucide-react";
+import { Pill, PrimaryButton } from "./ui.jsx";
 import { ROLE_LABELS } from "../data/defaults.js";
 
-// PIN-based login screen.
-// Multi-tenant / real Firebase auth would swap the `submit` body for a
-// signed-in user object — see notes in lib/storage.js for Supabase upgrades.
-
-export default function LoginScreen({ users, onLogin }) {
+export default function LoginScreen({ users, onLogin, onCloudLogin }) {
   const [pickedUser, setPickedUser] = useState(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [mode, setMode] = useState("pin"); // "pin" or "cloud"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submittingCloud, setSubmittingCloud] = useState(false);
 
-  const submit = (fullPin) => {
+  const submitPin = (fullPin) => {
     if (pickedUser && String(fullPin) === String(pickedUser.pin)) {
       onLogin(pickedUser);
     } else {
@@ -25,8 +25,75 @@ export default function LoginScreen({ users, onLogin }) {
     const next = (pin + d).slice(0, 4);
     setPin(next);
     setError("");
-    if (next.length === 4) submit(next);
+    if (next.length === 4) submitPin(next);
   };
+
+  const handleCloudSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError("Please fill in email and password");
+      return;
+    }
+    setError("");
+    setSubmittingCloud(true);
+    try {
+      if (onCloudLogin) {
+        await onCloudLogin(email, password);
+      } else {
+        // Fallback simulated cloud login for local dev
+        onLogin({ id: "user-cloud", name: email.split("@")[0], role: "Owner", pin: "0000" });
+      }
+    } catch (err) {
+      setError(err.message || "Failed to sign in");
+    } finally {
+      setSubmittingCloud(false);
+    }
+  };
+
+  if (mode === "cloud") {
+    return (
+      <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center gap-6 p-6">
+        <button
+          onClick={() => { setMode("pin"); setError(""); }}
+          className="self-start flex items-center gap-1 text-sm text-stone-400"
+        >
+          <ArrowLeft size={15} /> Back to Terminal PIN
+        </button>
+        <h1 className="font-serif text-2xl text-amber-500 flex items-center gap-2">
+          <Coffee size={24} /> Kado Cloud Auth
+        </h1>
+        <p className="text-sm text-stone-400">Sign in to your café organization</p>
+        <form onSubmit={handleCloudSubmit} className="w-full max-w-sm flex flex-col gap-4 bg-stone-900 border border-stone-800 p-6 rounded-2xl">
+          {error && <p className="text-xs text-rose-400 bg-rose-500/10 p-2.5 rounded-xl border border-rose-500/30">{error}</p>}
+          <div className="flex flex-col gap-1 text-left">
+            <label className="text-xs text-stone-300 font-medium">Account Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="owner@kado.cafe"
+              className="bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-1 text-left">
+            <label className="text-xs text-stone-300 font-medium">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+              required
+            />
+          </div>
+          <PrimaryButton type="submit" disabled={submittingCloud} className="w-full justify-center mt-2">
+            {submittingCloud ? "Authenticating..." : "Sign In to Organization"}
+          </PrimaryButton>
+        </form>
+      </div>
+    );
+  }
 
   if (!pickedUser) {
     return (
@@ -53,6 +120,12 @@ export default function LoginScreen({ users, onLogin }) {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => { setMode("cloud"); setError(""); }}
+          className="mt-4 text-xs text-stone-400 hover:text-amber-400 flex items-center gap-1.5 transition"
+        >
+          <KeyRound size={14} /> Cloud Account Login
+        </button>
       </div>
     );
   }

@@ -144,6 +144,11 @@ export default function CheckoutPanel({
       grandTotal,
       pointsRedeemed: pointsDeduction,
       paymentMode: finalPaymentDetails,
+      paymentBreakdown: paymentMode === "Split" ? [
+        { method: "Cash", amount: splitCashNum },
+        { method: "UPI", amount: splitUpiNum },
+        { method: "Card", amount: splitCardNum }
+      ].filter(p => p.amount > 0) : [{ method: paymentMode, amount: grandTotal }],
       status: paymentMode === "Pending" ? "Pending" : status,
       paidAt: new Date().toISOString()
     };
