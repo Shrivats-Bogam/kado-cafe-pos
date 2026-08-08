@@ -142,10 +142,23 @@ export default function StaffApp() {
     // Realtime channel itself tries to reconnect automatically; we just need a safety net.
     const interval = setInterval(refetchAndApply, 90000);
 
+    // Multi-tab storage sync for local mode (sub-10ms response when another tab updates localStorage)
+    const handleStorageChange = (e) => {
+      if (e.key === "kado-cafe-state" && e.newValue) {
+        refetchAndApply();
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
     // Realtime connection status → reflects on the sidebar/offline
     const pingTimer = setTimeout(() => setConnected(true), 1500);
 
-    return () => { unsub && unsub(); clearInterval(interval); clearTimeout(pingTimer); };
+    return () => { 
+      unsub && unsub(); 
+      clearInterval(interval); 
+      clearTimeout(pingTimer); 
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, [loaded, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Reset tab when role changes scope ----------

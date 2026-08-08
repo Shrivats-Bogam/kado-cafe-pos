@@ -91,10 +91,16 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
 }
 
 export function generateBillForTable(state, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints) {
+  const targetTable = (state.tables || []).find((t) => t.id === tableId);
+  if (!targetTable || targetTable.status === "available") {
+    // CONCURRENCY GUARD: Table has already been closed or billed by another client
+    return state;
+  }
+
   const billId = makeId("o");
   const finalTotal = Math.max(0, totals.grandTotal - (redeemedPoints || 0));
   const { customers, customerId } = applyLoyalty(state.customers, phone, finalTotal, redeemedPoints || 0, state.settings || {}, billId, state.orderHistory || []);
-  const tableNo = state.tables.find((t) => t.id === tableId)?.number;
+  const tableNo = targetTable.number;
 
   // Deduct inventory stock for table order items
   const deducted = deductStockForOrderItems(state.inventory || [], state.recipes || {}, state.inventoryLogs || [], items, billId);
