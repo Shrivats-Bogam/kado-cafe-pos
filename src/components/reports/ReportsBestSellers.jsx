@@ -1,65 +1,104 @@
-import { useMemo } from "react";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { Card, Pill } from "../ui.jsx";
-import { topSellers } from "../../lib/aggregate.js";
-import { getSlowMovers } from "../../lib/reportsAggregate.js";
+import { useState } from "react";
+import { Award, TrendingDown, Utensils } from "lucide-react";
+import { Card } from "../ui.jsx";
+import { currency } from "../../lib/currency.js";
+import { aggregateProductPerformance } from "../../lib/reportsAggregate.js";
 
-export function ReportsBestSellers({ orders, menuItems }) {
-  const topItems = useMemo(() => topSellers(orders, menuItems, 5), [orders, menuItems]);
-  const slowMovers = useMemo(() => getSlowMovers(orders, menuItems), [orders, menuItems]);
+export function ReportsBestSellers({ orders = [], menuItems = [] }) {
+  const [sortBy, setSortBy] = useState("units"); // "units" or "revenue"
+  const { bestSellers, slowMovers } = aggregateProductPerformance(orders, menuItems);
+
+  const sortedBestSellers = [...bestSellers].sort((a, b) => 
+    sortBy === "revenue" ? b.revenue - a.revenue : b.unitsSold - a.unitsSold
+  );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card className="p-4 flex flex-col gap-4">
-        <h3 className="font-serif text-lg font-bold text-stone-50">Best Selling Items</h3>
-        {topItems.length === 0 ? (
-          <div className="h-[250px] flex items-center justify-center text-stone-500 text-sm">No data available.</div>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      {/* Top 10 Best Sellers */}
+      <Card className="lg:col-span-7 p-4 bg-stone-900 border-stone-800 flex flex-col gap-3 shadow-md">
+        <div className="flex justify-between items-center border-b border-stone-800 pb-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-300 flex items-center gap-2">
+            <Award size={16} className="text-amber-500" /> Top 10 Best Selling Items
+          </h3>
+
+          <div className="flex items-center gap-1 bg-stone-950 p-1 rounded-xl border border-stone-800">
+            <button
+              type="button"
+              onClick={() => setSortBy("units")}
+              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
+                sortBy === "units" ? "bg-amber-500 text-stone-950" : "text-stone-400 hover:text-stone-200"
+              }`}
+            >
+              By Units
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortBy("revenue")}
+              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
+                sortBy === "revenue" ? "bg-amber-500 text-stone-950" : "text-stone-400 hover:text-stone-200"
+              }`}
+            >
+              By Revenue
+            </button>
+          </div>
+        </div>
+
+        {sortedBestSellers.length === 0 ? (
+          <div className="py-8 text-center text-xs text-stone-500 border border-dashed border-stone-800 rounded-xl">
+            No sales recorded in selected period.
+          </div>
         ) : (
-          <div className="w-full h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topItems} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#292524" horizontal={true} vertical={false} />
-                <XAxis type="number" tick={{ fill: "#a8a29e", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "#a8a29e", fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
-                <Tooltip 
-                  contentStyle={{ background: "#1c1917", border: "1px solid #44403c", borderRadius: "8px" }} 
-                  itemStyle={{ color: "#f59e0b", fontWeight: "bold" }}
-                />
-                <Bar dataKey="qty" fill="#d97706" radius={[0, 4, 4, 0]} barSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {sortedBestSellers.map((item, idx) => (
+              <div key={item.id} className="flex justify-between items-center bg-stone-950 p-2.5 rounded-xl border border-stone-800 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-amber-500 w-5">#{idx + 1}</span>
+                  <div>
+                    <span className="font-bold text-stone-100 block">{item.name}</span>
+                    <span className="text-[10px] text-stone-500">{item.category}</span>
+                  </div>
+                </div>
+
+                <div className="text-right font-mono">
+                  <span className="font-bold text-emerald-400 block">{currency(item.revenue)}</span>
+                  <span className="text-[10px] text-stone-400">{item.unitsSold} units sold ({item.orderCount} orders)</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>
 
-      <Card className="p-4 flex flex-col gap-4 overflow-hidden">
-        <h3 className="font-serif text-lg font-bold text-stone-50">Slow Moving Items</h3>
+      {/* Slow Movers */}
+      <Card className="lg:col-span-5 p-4 bg-stone-900 border-stone-800 flex flex-col gap-3 shadow-md">
+        <div className="flex justify-between items-center border-b border-stone-800 pb-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+            <TrendingDown size={16} /> Slow Moving Items ({slowMovers.length})
+          </h3>
+          <span className="text-[10px] text-stone-500 font-mono">Low Sales Alert</span>
+        </div>
+
         {slowMovers.length === 0 ? (
-          <div className="h-[250px] flex items-center justify-center text-stone-500 text-sm">All items are selling well.</div>
+          <div className="py-8 text-center text-xs text-stone-500 border border-dashed border-stone-800 rounded-xl">
+            All menu items performed well in this period.
+          </div>
         ) : (
-          <div className="overflow-x-auto h-[250px] no-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[300px]">
-              <thead>
-                <tr className="border-b border-stone-800">
-                  <th className="py-2 text-xs font-semibold text-stone-400">Item Name</th>
-                  <th className="py-2 text-xs font-semibold text-stone-400">Category</th>
-                  <th className="py-2 text-xs font-semibold text-stone-400 text-right">Sold</th>
-                  <th className="py-2 text-xs font-semibold text-stone-400 text-right">Recommendation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {slowMovers.map((item, i) => (
-                  <tr key={i} className="border-b border-stone-800/50 hover:bg-stone-800/20">
-                    <td className="py-3 text-sm text-stone-200">{item.name}</td>
-                    <td className="py-3 text-sm text-stone-400">{item.category}</td>
-                    <td className="py-3 text-sm font-semibold text-stone-200 text-right">{item.qty}</td>
-                    <td className="py-3 text-right">
-                      <Pill tone={item.action === "Promote" ? "sky" : "rose"}>{item.action}</Pill>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {slowMovers.map((item) => (
+              <div key={item.id} className="p-2.5 rounded-xl bg-stone-950 border border-stone-800 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-bold text-stone-200 flex items-center gap-1">
+                    <Utensils size={12} className="text-stone-500" /> {item.name}
+                  </span>
+                  <span className="text-[10px] text-stone-400 font-mono">
+                    {item.unitsSold} sold • {currency(item.revenue)}
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                  {item.recommendation}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </Card>

@@ -1,46 +1,59 @@
-import { useMemo } from "react";
-import { Users, UserCheck, Gift, CreditCard } from "lucide-react";
+import { Users, Award, Gift, UserCheck } from "lucide-react";
 import { Card } from "../ui.jsx";
 import { currency } from "../../lib/currency.js";
-import { getCustomerAnalytics } from "../../lib/reportsAggregate.js";
 
-function MiniStat({ label, value, icon: Icon, accent }) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-stone-950 border border-stone-800 rounded-xl">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-xs font-semibold text-stone-400">{label}</span>
-        <span className="text-lg font-serif font-bold text-stone-50">{value}</span>
-      </div>
-      <div className={`p-2 rounded-lg bg-stone-800 ${accent}`}>
-        <Icon size={18} />
-      </div>
-    </div>
-  );
-}
+export function ReportsCustomerAnalytics({ orders = [], customers = [] }) {
+  const totalCust = customers.length;
+  const returningCust = customers.filter((c) => (c.totalOrders || c.totalVisits || 0) > 1).length;
+  const newCust = Math.max(0, totalCust - returningCust);
+  const repeatRate = totalCust > 0 ? Math.round((returningCust / totalCust) * 100) : 0;
 
-export function ReportsCustomerAnalytics({ orders, customers }) {
-  const stats = useMemo(() => getCustomerAnalytics(orders, customers), [orders, customers]);
+  const silverCount = customers.filter((c) => (c.membership || "Silver") === "Silver").length;
+  const goldCount = customers.filter((c) => c.membership === "Gold").length;
+  const platCount = customers.filter((c) => c.membership === "Platinum").length;
+
+  const totalPointsActive = customers.reduce((sum, c) => sum + (c.points || 0), 0);
 
   return (
-    <Card className="p-4 flex flex-col gap-4">
-      <h3 className="font-serif text-lg font-bold text-stone-50">Customer Analytics</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <MiniStat label="New Customers" value={stats.newCustomers} icon={Users} accent="text-amber-500" />
-        <MiniStat label="Returning Customers" value={stats.returningCustomers} icon={UserCheck} accent="text-emerald-500" />
-        <MiniStat label="Avg Customer Spend" value={currency(stats.avgSpend)} icon={CreditCard} accent="text-sky-500" />
-        <MiniStat label="Loyalty Redemptions" value={`-${currency(stats.redemptions)}`} icon={Gift} accent="text-rose-500" />
+    <Card className="p-4 bg-stone-900 border-stone-800 flex flex-col gap-3 shadow-md">
+      <div className="flex justify-between items-center border-b border-stone-800 pb-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-stone-300 flex items-center gap-2">
+          <Users size={16} className="text-amber-500" /> CRM & Loyalty Intelligence
+        </h3>
       </div>
-      <div className="mt-2">
-        <span className="text-xs font-semibold text-stone-400 mb-2 block">Membership Distribution</span>
-        <div className="flex h-4 rounded-full overflow-hidden w-full bg-stone-800">
-          <div style={{ width: `${(stats.tiers.silver / Math.max(1, customers.length)) * 100}%` }} className="bg-stone-400" title={`Silver: ${stats.tiers.silver}`} />
-          <div style={{ width: `${(stats.tiers.gold / Math.max(1, customers.length)) * 100}%` }} className="bg-amber-400" title={`Gold: ${stats.tiers.gold}`} />
-          <div style={{ width: `${(stats.tiers.platinum / Math.max(1, customers.length)) * 100}%` }} className="bg-sky-400" title={`Platinum: ${stats.tiers.platinum}`} />
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="bg-stone-950 p-2.5 rounded-xl border border-stone-800">
+          <span className="text-[10px] text-stone-500 uppercase font-bold block">Repeat Rate</span>
+          <span className="text-base font-bold text-amber-400 font-serif">{repeatRate}%</span>
+          <span className="text-[10px] text-stone-400 block mt-0.5">{returningCust} returning / {totalCust} total</span>
         </div>
-        <div className="flex justify-between mt-1 px-1">
-          <span className="text-[10px] text-stone-500">Silver ({stats.tiers.silver})</span>
-          <span className="text-[10px] text-stone-500">Gold ({stats.tiers.gold})</span>
-          <span className="text-[10px] text-stone-500">Platinum ({stats.tiers.platinum})</span>
+
+        <div className="bg-stone-950 p-2.5 rounded-xl border border-stone-800">
+          <span className="text-[10px] text-stone-500 uppercase font-bold block">Active Points</span>
+          <span className="text-base font-bold text-purple-400 font-mono flex items-center gap-1">
+            <Gift size={14} /> {totalPointsActive.toLocaleString()} pts
+          </span>
+          <span className="text-[10px] text-stone-400 block mt-0.5">Across all profiles</span>
+        </div>
+      </div>
+
+      {/* Tier Distribution */}
+      <div className="bg-stone-950 p-2.5 rounded-xl border border-stone-800 space-y-1 text-xs">
+        <span className="text-[10px] uppercase font-bold text-stone-500 block">Membership Tiers</span>
+        <div className="grid grid-cols-3 gap-1 text-center font-mono">
+          <div className="bg-stone-900 p-1.5 rounded-lg border border-stone-800">
+            <span className="text-[10px] text-stone-400 block">🥈 Silver</span>
+            <span className="font-bold text-stone-200">{silverCount}</span>
+          </div>
+          <div className="bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/30">
+            <span className="text-[10px] text-amber-400 block">🥇 Gold</span>
+            <span className="font-bold text-amber-300">{goldCount}</span>
+          </div>
+          <div className="bg-purple-500/10 p-1.5 rounded-lg border border-purple-500/30">
+            <span className="text-[10px] text-purple-300 block">💎 Platinum</span>
+            <span className="font-bold text-purple-300">{platCount}</span>
+          </div>
         </div>
       </div>
     </Card>

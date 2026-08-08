@@ -1,36 +1,58 @@
-import { useMemo } from "react";
-import { Timer, ArrowDownUp, ArrowUpDown, Hash, Coins } from "lucide-react";
+import { Table, ShoppingBag } from "lucide-react";
 import { Card } from "../ui.jsx";
 import { currency } from "../../lib/currency.js";
-import { getTableAnalytics } from "../../lib/reportsAggregate.js";
+import { aggregateChannelPerformance } from "../../lib/reportsAggregate.js";
 
-function MiniStat({ label, value, icon: Icon, accent }) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-stone-950 border border-stone-800 rounded-xl">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-xs font-semibold text-stone-400">{label}</span>
-        <span className="text-lg font-serif font-bold text-stone-50">{value}</span>
-      </div>
-      <div className={`p-2 rounded-lg bg-stone-800 ${accent}`}>
-        <Icon size={18} />
-      </div>
-    </div>
-  );
-}
+export function ReportsTableAnalytics({ orders = [] }) {
+  const { tableOrders, tableRevenue, parcelOrders, parcelRevenue, tableList } = aggregateChannelPerformance(orders);
+  const totalRev = tableRevenue + parcelRevenue || 1;
 
-export function ReportsTableAnalytics({ orders }) {
-  const stats = useMemo(() => getTableAnalytics(orders), [orders]);
+  const tablePct = Math.round((tableRevenue / totalRev) * 100);
+  const parcelPct = Math.round((parcelRevenue / totalRev) * 100);
 
   return (
-    <Card className="p-4 flex flex-col gap-4">
-      <h3 className="font-serif text-lg font-bold text-stone-50">Table Analytics</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <MiniStat label="Avg Turnaround Time" value={stats.avgTime} icon={Timer} accent="text-amber-500" />
-        <MiniStat label="Fastest Turnover" value={stats.fastest} icon={ArrowDownUp} accent="text-emerald-500" />
-        <MiniStat label="Slowest Table" value={stats.slowest} icon={ArrowUpDown} accent="text-rose-500" />
-        <MiniStat label="Most Used Table" value={stats.mostUsed} icon={Hash} accent="text-sky-500" />
-        <MiniStat label="Avg Rev / Table" value={currency(stats.avgRevPerTable)} icon={Coins} accent="text-emerald-500" />
+    <Card className="p-4 bg-stone-900 border-stone-800 flex flex-col gap-3 shadow-md">
+      <div className="flex justify-between items-center border-b border-stone-800 pb-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-stone-300 flex items-center gap-2">
+          <Table size={16} className="text-amber-500" /> Channel Performance (Dine-in vs Parcel)
+        </h3>
       </div>
+
+      {/* Channel Comparison */}
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-1">
+          <div className="flex items-center justify-between text-stone-400 font-bold">
+            <span className="flex items-center gap-1"><Table size={13} className="text-amber-500" /> Dine-in Tables</span>
+            <span className="font-mono text-amber-400">{tablePct}%</span>
+          </div>
+          <span className="text-base font-bold text-stone-100 font-serif">{currency(tableRevenue)}</span>
+          <span className="text-[10px] text-stone-500 font-mono">{tableOrders} orders</span>
+        </div>
+
+        <div className="bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-1">
+          <div className="flex items-center justify-between text-stone-400 font-bold">
+            <span className="flex items-center gap-1"><ShoppingBag size={13} className="text-purple-400" /> Takeaway Parcel</span>
+            <span className="font-mono text-purple-300">{parcelPct}%</span>
+          </div>
+          <span className="text-base font-bold text-stone-100 font-serif">{currency(parcelRevenue)}</span>
+          <span className="text-[10px] text-stone-500 font-mono">{parcelOrders} orders</span>
+        </div>
+      </div>
+
+      {/* Table Breakdown List */}
+      {tableList.length > 0 && (
+        <div className="space-y-1.5 pt-1">
+          <span className="text-[10px] uppercase font-bold text-stone-500 block">Top Dine-in Tables</span>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {tableList.slice(0, 5).map((t) => (
+              <div key={t.name} className="flex justify-between items-center text-xs bg-stone-950 px-3 py-1.5 rounded-lg border border-stone-800 font-mono">
+                <span className="font-bold text-stone-200">{t.name}</span>
+                <span className="text-amber-400 font-bold">{currency(t.revenue)} ({t.orders} orders)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
