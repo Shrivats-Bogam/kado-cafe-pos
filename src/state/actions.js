@@ -1054,3 +1054,23 @@ export function submitCustomerFeedback(state, feedback) {
     customerFeedback: [newFeedback, ...(state.customerFeedback || [])]
   };
 }
+
+export function updateSettings(state, partialSettings, employeeName = "Owner") {
+  const currentSettings = state.settings || {};
+  const updatedSettings = { ...currentSettings, ...partialSettings };
+
+  const logEntry = {
+    id: makeId("log"),
+    employeeName,
+    action: "Updated configuration settings",
+    module: "Settings",
+    timestamp: new Date().toISOString()
+  };
+
+  return {
+    ...state,
+    cafeName: updatedSettings.businessName || state.cafeName,
+    settings: updatedSettings,
+    activityLogs: [logEntry, ...(state.activityLogs || [])]
+  };
+}

@@ -18,6 +18,7 @@ import ReportsView from "../views/ReportsView.jsx";
 import EmployeesView from "../views/EmployeesView.jsx";
 import AIInsightsView from "../views/AIInsightsView.jsx";
 import SettingsPanel from "../views/SettingsPanel.jsx";
+import SettingsView from "../views/SettingsView.jsx";
 import TableQRModal from "../views/TableQRModal.jsx";
 
 import { getState, setState, subscribeToChanges, isCloudEnabled } from "../lib/storage.js";
@@ -37,6 +38,7 @@ const TABS = [
   { id: "insights", label: "Insights", icon: Sparkles },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "employees", label: "Employees", icon: ShieldCheck },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export default function StaffApp() {
@@ -414,6 +416,14 @@ export default function StaffApp() {
               currentUser={currentUser}
             />
           )}
+          {tab === "settings" && (
+            <SettingsView
+              state={state}
+              dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
+              currentUser={currentUser}
+              onNavigate={(targetTab) => setTab(targetTab)}
+            />
+          )}
         </div>
       </div>
 
@@ -457,10 +467,14 @@ export default function StaffApp() {
       {showCalc && <Calculator onClose={() => setShowCalc(false)} />}
       {showSettings && (
         <SettingsPanel
+          state={state}
+          dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
           users={state.users}
           onAddUser={addUser}
           onRemoveUser={removeUser}
           onClose={() => setShowSettings(false)}
+          currentUser={currentUser}
+          onNavigate={(targetTab) => setTab(targetTab)}
         />
       )}
 

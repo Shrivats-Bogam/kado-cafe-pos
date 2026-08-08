@@ -77,6 +77,20 @@ export function PrimaryButton({ onClick, children, className = "", disabled, typ
   );
 }
 
+export function SecondaryButton({ onClick, children, className = "", disabled, type = "button", ariaLabel }) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className={`min-h-[44px] rounded-xl px-4 py-2.5 font-bold text-xs bg-stone-800 text-stone-200 hover:bg-stone-700 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 border border-stone-700 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function TextInput({ value, onChange, placeholder, type = "text", className = "", ariaLabel, ...rest }) {
   return (
     <input

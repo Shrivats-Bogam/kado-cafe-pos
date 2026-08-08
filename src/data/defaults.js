@@ -209,9 +209,76 @@ export function defaultRolePermissions() {
   };
 }
 
+export function defaultSettings() {
+  return {
+    // General & Business Profile
+    businessName: "Kado Cafe",
+    phone: "9876543210",
+    email: "owner@kadocafe.com",
+    address: "123 Cafe Street, Bandra West, Mumbai, Maharashtra 400050",
+    gstin: "27AAAAA0000A1Z5",
+    logoUrl: "",
+    currency: "INR ₹",
+    timezone: "Asia/Kolkata",
+    dateFormat: "DD/MM/YYYY",
+    timeFormat: "12h",
+
+    // Billing & Tax
+    gstEnabled: true,
+    gstRate: 5,
+    taxExclusive: false,
+    roundingMethod: "round",
+    allowDiscounts: true,
+    requireDiscountApproval: false,
+
+    // Receipts
+    receiptWidth: "80mm",
+    showLogoOnReceipt: true,
+    showAddressOnReceipt: true,
+    showGstinOnReceipt: true,
+    receiptFooter: "Thank you for visiting Kado Cafe! Please come again.",
+    autoPrintAfterPayment: false,
+
+    // Table Defaults
+    tableSections: ["Indoor", "Outdoor", "Terrace", "Bar"],
+    defaultTableCapacity: 4,
+    seatingIconsEnabled: true,
+
+    // Kitchen KDS
+    kitchenDisplayMode: "grid",
+    soundAlertsEnabled: true,
+    attentionThresholdMins: 15,
+    urgentThresholdMins: 30,
+
+    // Menu Preferences
+    showUnavailableItemsToStaff: true,
+    showUnavailableItemsToCustomers: false,
+    defaultMenuCategory: "All",
+
+    // Inventory Safety
+    defaultMinStockThreshold: 5,
+    stockWarningNotify: true,
+
+    // CRM & Loyalty Rules
+    phoneValidationEnabled: true,
+    preventDuplicateCustomers: true,
+    birthdayRemindersEnabled: true,
+    loyaltyEarnRate: 20,
+    loyaltyRedeemValue: 0.5,
+    silverThreshold: 0,
+    goldThreshold: 10000,
+    platinumThreshold: 50000,
+
+    // Data & Export
+    dataExportFormat: "csv",
+    autoBackupEnabled: false,
+  };
+}
+
 export function defaultState() {
   return {
     cafeName: "Kado Cafe",
+    settings: defaultSettings(),
     tables: defaultTables(),
     menuItems: defaultMenu(),
     parcels: [],
