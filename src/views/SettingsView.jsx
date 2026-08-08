@@ -7,6 +7,13 @@ import {
 import { Card, PrimaryButton, SecondaryButton, Pill } from "../components/ui.jsx";
 import { defaultSettings, ROLE_LABELS } from "../data/defaults.js";
 import { getAISettings, saveAISettings, PROVIDERS, testAIConnection } from "../lib/ai.js";
+import {
+  buildBackupPayload,
+  validateBackupPayload,
+  createPreRestoreSnapshot,
+  getSafetySnapshots,
+  verifyRestoredState
+} from "../lib/backupEngine.js";
 
 const SECTIONS = [
   { id: "general", label: "General & Profile", icon: Building2 },
@@ -41,6 +48,13 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
   // Danger zone double-confirm modal
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [resetInput, setResetInput] = useState("");
+
+  // Restore Modal State
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restorePayload, setRestorePayload] = useState(null);
+  const [restoreValidation, setRestoreValidation] = useState(null);
+  const [restoreInput, setRestoreInput] = useState("");
+  const [restoreError, setRestoreError] = useState("");
 
   // Sync form when state settings update externally
   useEffect(() => {
@@ -642,49 +656,131 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
             </div>
           )}
 
-          {/* Section 9: Data & Export */}
+          {/* Section 9: Data & Export & Recovery */}
           {activeSection === "data" && (
-            <div className="space-y-4 text-xs">
+            <div className="space-y-6 text-xs">
               <h3 className="text-sm font-bold text-stone-100 border-b border-stone-800 pb-2 flex items-center gap-2">
-                <Database size={16} className="text-amber-500" /> Data Portability & CSV Exporters
+                <Database size={16} className="text-amber-500" /> Data Portability & Disaster Recovery Center
               </h3>
 
-              <p className="text-stone-300">
-                Export clean CSV accounting data files for external reporting, bookkeeping, and inventory audits.
-              </p>
+              {/* Backup Preview Summary */}
+              <div className="p-4 rounded-xl bg-stone-950 border border-stone-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-stone-200 uppercase tracking-wide">Live Backup Status & Scope</span>
+                  <Pill tone="emerald">Ready for Export</Pill>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Orders / Bills</span>
+                    <strong className="text-stone-100 text-sm">{(state.orderHistory || []).length}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Customers</span>
+                    <strong className="text-stone-100 text-sm">{(state.customers || []).length}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Menu Items</span>
+                    <strong className="text-stone-100 text-sm">{(state.menuItems || []).length}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Inventory Stock</span>
+                    <strong className="text-stone-100 text-sm">{(state.inventory || []).length}</strong>
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => exportCSV("orders")}
-                  className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
-                >
-                  <Download size={16} className="text-amber-500" /> Export Orders
-                </button>
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-stone-800/60">
+                  <PrimaryButton
+                    disabled={!isOwner}
+                    onClick={() => {
+                      const payload = buildBackupPayload(state);
+                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+                      a.href = url;
+                      a.download = `kado-cafe-backup-${dateStr}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download size={15} /> Export Full JSON Backup
+                  </PrimaryButton>
 
-                <button
-                  type="button"
-                  onClick={() => exportCSV("customers")}
-                  className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
-                >
-                  <Download size={16} className="text-purple-400" /> Export Customers
-                </button>
+                  <SecondaryButton
+                    disabled={!isOwner}
+                    onClick={() => setShowRestoreModal(true)}
+                  >
+                    <RefreshCw size={15} className="text-amber-500" /> Restore Backup
+                  </SecondaryButton>
+                </div>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => exportCSV("menu")}
-                  className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
-                >
-                  <Download size={16} className="text-emerald-400" /> Export Menu
-                </button>
+              {/* Safety Snapshots */}
+              <div className="space-y-2">
+                <span className="font-bold text-stone-300 block">Pre-Restore Safety Snapshots (Local Retention)</span>
+                {getSafetySnapshots().length === 0 ? (
+                  <span className="text-stone-500 block italic">No pre-restore safety snapshots created yet.</span>
+                ) : (
+                  <div className="space-y-1.5">
+                    {getSafetySnapshots().map((s, idx) => (
+                      <div key={idx} className="p-2.5 rounded-xl bg-stone-950 border border-stone-800 flex items-center justify-between text-[11px]">
+                        <div>
+                          <strong className="text-stone-200 block">{s.key}</strong>
+                          <span className="text-stone-500">{new Date(s.timestamp).toLocaleString()} • {s.ordersCount} Orders • {s.customersCount} Customers</span>
+                        </div>
+                        <SecondaryButton
+                          disabled={!isOwner}
+                          onClick={() => {
+                            const raw = localStorage.getItem(s.key);
+                            if (raw && dispatch) {
+                              const parsed = JSON.parse(raw);
+                              createPreRestoreSnapshot(state);
+                              dispatch("restoreBackup", parsed, currentUser?.name || "Owner");
+                              if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
+                            }
+                          }}
+                        >
+                          Restore Snapshot
+                        </SecondaryButton>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => exportCSV("inventory")}
-                  className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
-                >
-                  <Download size={16} className="text-sky-400" /> Export Inventory
-                </button>
+              {/* CSV Exporters */}
+              <div className="space-y-2 pt-3 border-t border-stone-800">
+                <span className="font-bold text-stone-300 block">CSV Data Exporters</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => exportCSV("orders")}
+                    className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
+                  >
+                    <Download size={16} className="text-amber-500" /> Export Orders CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportCSV("customers")}
+                    className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
+                  >
+                    <Download size={16} className="text-purple-400" /> Export Customers CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportCSV("menu")}
+                    className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
+                  >
+                    <Download size={16} className="text-emerald-400" /> Export Menu CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportCSV("inventory")}
+                    className="p-3 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 flex flex-col items-center gap-1 text-center font-bold text-stone-200 transition cursor-pointer"
+                  >
+                    <Download size={16} className="text-sky-400" /> Export Inventory CSV
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -754,6 +850,177 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
                 Confirm Reset
               </button>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Multi-Step Owner Backup Restore Modal */}
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg p-5 bg-stone-900 border-amber-500/40 flex flex-col gap-4 text-xs">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-2">
+              <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
+                <RefreshCw size={18} /> Restore Café Data Backup
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRestoreModal(false);
+                  setRestorePayload(null);
+                  setRestoreValidation(null);
+                  setRestoreInput("");
+                  setRestoreError("");
+                }}
+                className="text-stone-400 hover:text-stone-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Step 1: File Selection */}
+            {!restorePayload && (
+              <div className="space-y-3">
+                <p className="text-stone-300">
+                  Select a valid Kado Cafe JSON backup file (`.json`) exported previously by the Owner.
+                </p>
+
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setRestoreError("");
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                      try {
+                        const parsed = JSON.parse(evt.target.result);
+                        const validation = validateBackupPayload(parsed);
+                        setRestorePayload(parsed);
+                        setRestoreValidation(validation);
+                        if (!validation.valid) {
+                          setRestoreError(validation.errors.join(" "));
+                        }
+                      } catch (err) {
+                        setRestoreError("Failed to parse JSON file. File may be corrupted.");
+                      }
+                    };
+                    reader.readAsText(file);
+                  }}
+                  className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-stone-300 text-xs focus:outline-none"
+                />
+
+                {restoreError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center gap-2">
+                    <AlertCircle size={16} /> {restoreError}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2 & 3: Validation & Comparison Preview */}
+            {restorePayload && restoreValidation && (
+              <div className="space-y-4">
+                {!restoreValidation.valid ? (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 space-y-1">
+                    <strong className="block font-bold">Validation Failed:</strong>
+                    {restoreValidation.errors.map((err, i) => (
+                      <p key={i}>• {err}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-2">
+                      <Check size={16} /> Backup validated successfully! Checksum & structural integrity verified.
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-3 rounded-xl bg-stone-950 border border-stone-800 space-y-1">
+                        <strong className="text-stone-400 block border-b border-stone-800 pb-1">CURRENT LIVE STATE</strong>
+                        <div>Orders: <strong>{(state.orderHistory || []).length}</strong></div>
+                        <div>Customers: <strong>{(state.customers || []).length}</strong></div>
+                        <div>Menu Items: <strong>{(state.menuItems || []).length}</strong></div>
+                        <div>Inventory: <strong>{(state.inventory || []).length}</strong></div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-stone-950 border border-amber-500/30 space-y-1">
+                        <strong className="text-amber-400 block border-b border-stone-800 pb-1">BACKUP DATA TO RESTORE</strong>
+                        <div>Orders: <strong>{restoreValidation.summary.ordersCount}</strong></div>
+                        <div>Customers: <strong>{restoreValidation.summary.customersCount}</strong></div>
+                        <div>Menu Items: <strong>{restoreValidation.summary.menuItemsCount}</strong></div>
+                        <div>Inventory: <strong>{restoreValidation.summary.inventoryCount}</strong></div>
+                      </div>
+                    </div>
+
+                    <p className="text-amber-300 font-semibold bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/30">
+                      ⚠️ Restoring will replace current live state. An automatic <strong>Pre-Restore Safety Snapshot</strong> will be saved before restore.
+                    </p>
+
+                    <div>
+                      <label className="text-stone-300 block mb-1 font-semibold">
+                        Type <strong className="text-amber-400 font-mono">RESTORE DATA</strong> to confirm:
+                      </label>
+                      <input
+                        type="text"
+                        value={restoreInput}
+                        onChange={(e) => setRestoreInput(e.target.value)}
+                        placeholder="Type RESTORE DATA..."
+                        className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 font-mono focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-stone-800">
+                  <SecondaryButton
+                    onClick={() => {
+                      setRestorePayload(null);
+                      setRestoreValidation(null);
+                      setRestoreInput("");
+                      setRestoreError("");
+                    }}
+                  >
+                    Select Different File
+                  </SecondaryButton>
+
+                  {restoreValidation.valid && (
+                    <button
+                      type="button"
+                      disabled={restoreInput !== "RESTORE DATA"}
+                      onClick={() => {
+                        if (dispatch) {
+                          // 1. Create Safety Snapshot
+                          createPreRestoreSnapshot(state);
+
+                          // 2. Dispatch Restore
+                          dispatch("restoreBackup", restorePayload, currentUser?.name || "Owner");
+
+                          // 3. Post-restore verification
+                          const verified = verifyRestoredState(restorePayload.data);
+                          if (!verified.passed) {
+                            console.warn("Post-restore issues:", verified.issues);
+                          }
+
+                          // 4. Trigger storage sync across tabs
+                          if (typeof window !== "undefined") {
+                            window.dispatchEvent(new Event("storage"));
+                          }
+                        }
+
+                        setShowRestoreModal(false);
+                        setRestorePayload(null);
+                        setRestoreValidation(null);
+                        setRestoreInput("");
+                        setRestoreError("");
+                      }}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-stone-950 font-bold text-xs cursor-pointer flex items-center gap-1.5 shadow-md"
+                    >
+                      <RefreshCw size={15} /> Confirm & Execute Restore
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

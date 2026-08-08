@@ -1095,3 +1095,21 @@ export function updateSettings(state, partialSettings, employeeName = "Owner") {
     activityLogs: [logEntry, ...(state.activityLogs || [])]
   };
 }
+
+export function restoreBackup(state, restoredPayload, employeeName = "Owner") {
+  const restoredData = restoredPayload.data || restoredPayload;
+
+  const logEntry = {
+    id: makeId("log"),
+    employeeName,
+    action: `Restored full backup payload (Backup ID: ${restoredPayload.backupId || "N/A"})`,
+    module: "Disaster Recovery",
+    timestamp: new Date().toISOString()
+  };
+
+  return {
+    ...defaultState(),
+    ...restoredData,
+    activityLogs: [logEntry, ...(restoredData.activityLogs || [])]
+  };
+}
