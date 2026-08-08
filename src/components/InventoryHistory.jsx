@@ -42,14 +42,15 @@ export default function InventoryHistory({ inventoryLogs = [] }) {
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
-          {["All", "Purchase", "Sale", "Wastage", "Damage", "Staff", "Adjustment"].map((t) => (
+          {["All", "Purchase", "Sale", "Wastage", "Damage", "Staff", "Adjustment", "Warning"].map((t) => (
             <button
               key={t}
+              type="button"
               onClick={() => setTypeFilter(t)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition min-h-[44px] cursor-pointer ${
                 typeFilter === t
-                  ? "bg-amber-500 text-stone-950"
-                  : "bg-stone-800 text-stone-400 hover:bg-stone-700"
+                  ? "bg-amber-500 text-stone-950 shadow-md"
+                  : "bg-stone-950 border border-stone-800 text-stone-400 hover:text-stone-200"
               }`}
             >
               {t}

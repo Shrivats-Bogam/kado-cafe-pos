@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Trash2, Check, BookOpen } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Trash2, Check, BookOpen, Utensils, AlertCircle } from "lucide-react";
 import { Card, PrimaryButton } from "./ui.jsx";
 
 export default function RecipeBuilder({ 
@@ -37,7 +37,7 @@ export default function RecipeBuilder({
     const next = [...currentIngredients];
     next[index] = {
       ...next[index],
-      [field]: field === "qty" ? Math.max(0, Number(value) || 0) : value
+      [field]: field === "qty" ? Math.max(0.001, Number(value) || 0) : value
     };
     setCurrentIngredients(next);
   };
@@ -48,7 +48,9 @@ export default function RecipeBuilder({
 
   const handleSave = () => {
     if (!selectedMenuId) return;
-    onSaveRecipe(selectedMenuId, currentIngredients);
+    // Filter out rows with invalid/0 qty
+    const cleanIngredients = currentIngredients.filter((r) => r.qty > 0 && r.ingredientId);
+    onSaveRecipe(selectedMenuId, cleanIngredients);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
   };
@@ -69,20 +71,21 @@ export default function RecipeBuilder({
             return (
               <button
                 key={m.id}
+                type="button"
                 onClick={() => handleSelectMenu(m.id)}
-                className={`w-full text-left p-3 rounded-xl border text-xs flex justify-between items-center transition ${
+                className={`w-full text-left p-3 rounded-xl border text-xs flex justify-between items-center transition cursor-pointer ${
                   isSelected
                     ? "bg-amber-500 text-stone-950 font-bold border-amber-400 shadow-md"
                     : "bg-stone-950 text-stone-200 border-stone-800 hover:bg-stone-800"
                 }`}
               >
-                <span>{m.name}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                <span className="font-semibold truncate pr-2">{m.name}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 font-mono ${
                   hasRecipe 
-                    ? (isSelected ? "bg-stone-900 text-amber-400" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30") 
+                    ? (isSelected ? "bg-stone-950 text-amber-400 font-bold" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30") 
                     : "bg-stone-800 text-stone-500"
                 }`}>
-                  {hasRecipe ? `${recipes[m.id].length} ingredients` : "No recipe"}
+                  {hasRecipe ? `${recipes[m.id].length} ingr` : "No recipe"}
                 </span>
               </button>
             );
@@ -98,21 +101,23 @@ export default function RecipeBuilder({
               <h3 className="text-base font-serif font-bold text-stone-50">
                 Recipe for: <span className="text-amber-400">{selectedMenuItem?.name || "Select an Item"}</span>
               </h3>
-              <p className="text-xs text-stone-400 mt-0.5">Define ingredients deducted automatically when this item is billed</p>
+              <p className="text-xs text-stone-400 mt-0.5">Define ingredient portion sizes deducted automatically when billed</p>
             </div>
             
             <button
+              type="button"
               onClick={handleAddIngredientRow}
               disabled={inventory.length === 0}
-              className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 min-h-[44px] cursor-pointer"
             >
               <Plus size={15} /> Add Ingredient
             </button>
           </div>
 
           {currentIngredients.length === 0 ? (
-            <div className="py-12 text-center text-stone-500 text-xs border border-dashed border-stone-800 rounded-xl">
-              No ingredients added to this recipe yet. Click "Add Ingredient" to begin.
+            <div className="py-12 text-center text-stone-500 text-xs border border-dashed border-stone-800 rounded-2xl flex flex-col items-center gap-2">
+              <Utensils size={28} className="text-stone-700" />
+              <span>No ingredients configured for this recipe yet. Click "Add Ingredient" to begin.</span>
             </div>
           ) : (
             <div className="space-y-3">
@@ -122,25 +127,26 @@ export default function RecipeBuilder({
                 return (
                   <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-stone-950 p-3 rounded-xl border border-stone-800">
                     <div className="flex-1">
-                      <label className="text-[10px] text-stone-500 block mb-0.5">Ingredient Product</label>
+                      <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">Ingredient Product</label>
                       <select
                         value={row.ingredientId}
                         onChange={(e) => handleUpdateRow(idx, "ingredientId", e.target.value)}
                         className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
                       >
                         {inventory.map(i => (
-                          <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                          <option key={i.id} value={i.id}>{i.name} ({i.unit}) - Stock: {i.currentStock} {i.unit}</option>
                         ))}
                       </select>
                     </div>
 
-                    <div className="w-full sm:w-32">
-                      <label className="text-[10px] text-stone-500 block mb-0.5">
+                    <div className="w-full sm:w-36">
+                      <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">
                         Qty per Portion ({matchedInv?.unit || "units"})
                       </label>
                       <input
                         type="number"
                         step="any"
+                        min="0.001"
                         value={row.qty}
                         onChange={(e) => handleUpdateRow(idx, "qty", e.target.value)}
                         className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-stone-100 focus:outline-none focus:border-amber-500"
@@ -149,8 +155,9 @@ export default function RecipeBuilder({
 
                     <div className="pt-2 sm:pt-4 flex justify-end">
                       <button
+                        type="button"
                         onClick={() => handleRemoveRow(idx)}
-                        className="p-1.5 rounded-lg bg-stone-900 hover:bg-rose-950 text-rose-400 transition"
+                        className="p-1.5 rounded-lg bg-stone-900 hover:bg-rose-950 text-rose-400 transition cursor-pointer"
                         title="Remove ingredient"
                       >
                         <Trash2 size={16} />
@@ -171,7 +178,7 @@ export default function RecipeBuilder({
           <PrimaryButton
             onClick={handleSave}
             disabled={!selectedMenuId}
-            className="min-h-[44px] px-6 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95"
+            className="min-h-[44px] px-6 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
           >
             {savedSuccess ? <Check size={16} className="text-emerald-400" /> : null}
             {savedSuccess ? "Recipe Saved!" : "Save Recipe"}

@@ -597,7 +597,7 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
     const itemQty = item.qty || 1;
     const recipe = recipes ? recipes[menuItemId] : null;
 
-    if (recipe && Array.isArray(recipe)) {
+    if (recipe && Array.isArray(recipe) && recipe.length > 0) {
       recipe.forEach((req) => {
         const invIdx = nextInventory.findIndex((i) => i.id === req.ingredientId);
         if (invIdx >= 0) {
@@ -617,12 +617,26 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
             type: "Sale",
             qty: -totalDeduction,
             unit: invItem.unit,
-            reason: `Order #${String(orderId).slice(-6)}`,
+            reason: `Order #${String(orderId).slice(-6)} (${item.name || "Item"} x${itemQty})`,
             supplier: invItem.supplier || "-",
             cost: Math.round(totalDeduction * (invItem.costPrice || 0) * 100) / 100,
             date: new Date().toISOString(),
           });
         }
+      });
+    } else {
+      // PART 27: Log warning for item with no recipe configured without breaking payment
+      nextLogs.unshift({
+        id: makeId("log"),
+        ingredientId: "-",
+        ingredientName: item.name || "Item",
+        type: "Warning",
+        qty: 0,
+        unit: "-",
+        reason: `Recipe not configured for ${item.name || "Item"} (Order #${String(orderId).slice(-6)})`,
+        supplier: "-",
+        cost: 0,
+        date: new Date().toISOString(),
       });
     }
   });

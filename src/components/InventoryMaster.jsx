@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
-import { Search, Plus, Edit2, Trash2, X } from "lucide-react";
-import { Card, PrimaryButton } from "./ui.jsx";
+import { Search, Plus, Edit2, Trash2, X, AlertCircle } from "lucide-react";
+import { Card, PrimaryButton, ConfirmDialog } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
 
 export default function InventoryMaster({ 
   inventory = [], 
+  recipes = {},
   onAdd, 
   onEdit, 
   onDelete 
@@ -15,6 +16,7 @@ export default function InventoryMaster({
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -128,18 +130,32 @@ export default function InventoryMaster({
     setShowModal(false);
   };
 
+  const handleDeleteIngredient = (id) => {
+    // PART 23: Soft-archive ingredient if referenced in recipes so recipes remain connected
+    const isUsedInRecipes = Object.values(recipes).some((rList) =>
+      Array.isArray(rList) && rList.some((r) => r.ingredientId === id)
+    );
+
+    if (isUsedInRecipes) {
+      onEdit(id, { active: false });
+    } else {
+      onDelete(id);
+    }
+    setDeleteConfirmId(null);
+  };
+
   return (
     <div className="flex flex-col gap-4">
       {/* Controls Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-stone-900 p-3 rounded-2xl border border-stone-800">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" size={16} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" size={16} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search product name, category, or supplier..."
-            className="w-full bg-stone-950 border border-stone-800 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+            className="w-full bg-stone-950 border border-stone-800 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
           />
         </div>
 
@@ -148,7 +164,7 @@ export default function InventoryMaster({
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-300 focus:outline-none focus:border-amber-500"
+            className="bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-300 focus:outline-none focus:border-amber-500 min-h-[44px]"
           >
             {categories.map(c => <option key={c} value={c}>{c === "All" ? "All Categories" : c}</option>)}
           </select>
@@ -157,7 +173,7 @@ export default function InventoryMaster({
           <select
             value={selectedSupplier}
             onChange={(e) => setSelectedSupplier(e.target.value)}
-            className="bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-300 focus:outline-none focus:border-amber-500"
+            className="bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-300 focus:outline-none focus:border-amber-500 min-h-[44px]"
           >
             {suppliers.map(s => <option key={s} value={s}>{s === "All" ? "All Suppliers" : s}</option>)}
           </select>
@@ -166,7 +182,7 @@ export default function InventoryMaster({
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-300 focus:outline-none focus:border-amber-500"
+            className="bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-300 focus:outline-none focus:border-amber-500 min-h-[44px]"
           >
             <option value="All">All Stock Status</option>
             <option value="Healthy">Healthy Stock 🟢</option>
@@ -176,7 +192,7 @@ export default function InventoryMaster({
 
           <PrimaryButton
             onClick={openAddModal}
-            className="min-h-[44px] px-4 text-xs font-bold shrink-0 active:scale-95"
+            className="min-h-[44px] px-4 text-xs font-bold shrink-0 active:scale-95 cursor-pointer"
           >
             <Plus size={16} /> Add Product
           </PrimaryButton>
@@ -198,9 +214,9 @@ export default function InventoryMaster({
 
             let badgeTone = "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
             let badgeText = "Healthy 🟢";
-            if (stock === 0) {
+            if (stock <= 0) {
               badgeTone = "bg-rose-500/15 text-rose-400 border-rose-500/30";
-              badgeText = "Out of Stock ⚫";
+              badgeText = "Out of Stock 🔴";
             } else if (stock <= min) {
               badgeTone = "bg-amber-500/15 text-amber-400 border-amber-500/30";
               badgeText = "Low Stock 🟡";
@@ -245,14 +261,16 @@ export default function InventoryMaster({
 
                 <div className="flex items-center justify-end gap-2 border-t border-stone-800/80 pt-2">
                   <button
+                    type="button"
                     onClick={() => openEditModal(item)}
-                    className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs flex items-center gap-1 transition"
+                    className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs flex items-center gap-1 transition cursor-pointer"
                   >
                     <Edit2 size={14} /> Edit
                   </button>
                   <button
-                    onClick={() => onDelete(item.id)}
-                    className="p-2 rounded-xl bg-stone-800 hover:bg-rose-950 text-rose-400 text-xs flex items-center gap-1 transition"
+                    type="button"
+                    onClick={() => setDeleteConfirmId(item.id)}
+                    className="p-2 rounded-xl bg-stone-800 hover:bg-rose-950 text-rose-400 text-xs flex items-center gap-1 transition cursor-pointer"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -263,20 +281,31 @@ export default function InventoryMaster({
         )}
       </div>
 
+      {/* Delete Confirmation */}
+      {deleteConfirmId && (
+        <ConfirmDialog
+          title="Delete Ingredient"
+          message="Are you sure you want to delete this ingredient? If it is referenced by active recipes, it will be safely archived to preserve recipe and transaction integrity."
+          confirmText="Delete Ingredient"
+          onConfirm={() => handleDeleteIngredient(deleteConfirmId)}
+          onCancel={() => setDeleteConfirmId(null)}
+        />
+      )}
+
       {/* Add / Edit Product Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md p-5 bg-stone-900 border border-stone-800 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <Card className="w-full max-w-md p-5 bg-stone-900 border border-stone-800 flex flex-col gap-4 my-auto shadow-2xl rounded-2xl">
             <div className="flex justify-between items-center border-b border-stone-800 pb-3">
               <h3 className="font-bold text-stone-100 text-sm">{editingItem ? "Edit Product" : "Add New Ingredient"}</h3>
-              <button onClick={() => setShowModal(false)} className="text-stone-400 hover:text-stone-200">
+              <button type="button" onClick={() => setShowModal(false)} className="text-stone-400 hover:text-stone-200">
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-3">
               <div>
-                <label className="text-xs text-stone-400 block mb-1">Product Name *</label>
+                <label className="text-xs text-stone-400 font-semibold block mb-1">Product Name *</label>
                 <input
                   type="text"
                   required
@@ -289,7 +318,7 @@ export default function InventoryMaster({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-stone-400 block mb-1">Category</label>
+                  <label className="text-xs text-stone-400 font-semibold block mb-1">Category</label>
                   <input
                     type="text"
                     value={formData.category}
@@ -300,7 +329,7 @@ export default function InventoryMaster({
                 </div>
 
                 <div>
-                  <label className="text-xs text-stone-400 block mb-1">Unit</label>
+                  <label className="text-xs text-stone-400 font-semibold block mb-1">Unit</label>
                   <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
@@ -313,42 +342,42 @@ export default function InventoryMaster({
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-xs text-stone-400 block mb-1">Current Stock</label>
+                  <label className="text-xs text-stone-400 font-semibold block mb-1">Current Stock</label>
                   <input
                     type="number"
                     step="any"
                     value={formData.currentStock}
                     onChange={(e) => setFormData({ ...formData, currentStock: e.target.value })}
                     placeholder="0"
-                    className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                    className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-stone-400 block mb-1">Min Stock Alert</label>
+                  <label className="text-xs text-stone-400 font-semibold block mb-1">Min Stock Alert</label>
                   <input
                     type="number"
                     step="any"
                     value={formData.minStock}
                     onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
                     placeholder="0"
-                    className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                    className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-stone-400 block mb-1">Cost Price (₹)</label>
+                  <label className="text-xs text-stone-400 font-semibold block mb-1">Cost Price (₹)</label>
                   <input
                     type="number"
                     step="any"
                     value={formData.costPrice}
                     onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
                     placeholder="0"
-                    className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                    className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-stone-400 block mb-1">Supplier</label>
+                <label className="text-xs text-stone-400 font-semibold block mb-1">Supplier</label>
                 <input
                   type="text"
                   value={formData.supplier}
@@ -359,7 +388,7 @@ export default function InventoryMaster({
               </div>
 
               <div>
-                <label className="text-xs text-stone-400 block mb-1">Notes</label>
+                <label className="text-xs text-stone-400 font-semibold block mb-1">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -373,11 +402,11 @@ export default function InventoryMaster({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl border border-stone-700 py-2.5 text-xs text-stone-300 font-semibold"
+                  className="flex-1 rounded-xl border border-stone-700 py-2.5 text-xs text-stone-300 font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
-                <PrimaryButton type="submit" className="flex-1 min-h-[44px] text-xs font-bold">
+                <PrimaryButton type="submit" className="flex-1 min-h-[44px] text-xs font-bold cursor-pointer">
                   {editingItem ? "Save Changes" : "Create Product"}
                 </PrimaryButton>
               </div>
