@@ -397,7 +397,12 @@ export default function StaffApp() {
             />
           )}
           {tab === "insights" && (
-            <AIInsightsView orderHistory={state.orderHistory} menuItems={state.menuItems} />
+            <AIInsightsView 
+              state={state} 
+              orderHistory={state.orderHistory} 
+              menuItems={state.menuItems} 
+              onNavigate={(targetTab) => setTab(targetTab)} 
+            />
           )}
           {tab === "reports" && (
             <ReportsView state={state} />
