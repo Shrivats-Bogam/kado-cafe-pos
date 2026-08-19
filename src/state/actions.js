@@ -90,39 +90,66 @@ export function saveTableOrder(state, tableId, items, customerName, opts = {}) {
   return { ...state, tables: nextTables };
 }
 
-export function generateBillForTable(state, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints) {
+export function generateBillForTable(state, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints, serverTxResult = null) {
   const targetTable = (state.tables || []).find((t) => t.id === tableId);
   if (!targetTable || targetTable.status === "available") {
     // CONCURRENCY GUARD: Table has already been closed or billed by another client
     return state;
   }
 
-  const billId = makeId("o");
+  const billId = serverTxResult?.order_id || makeId("o");
   const finalTotal = Math.max(0, totals.grandTotal - (redeemedPoints || 0));
+  const isPending = paymentMode === "Pending";
+  const status = isPending ? "PENDING" : "Paid";
+
   const { customers, customerId } = applyLoyalty(state.customers, phone, finalTotal, redeemedPoints || 0, state.settings || {}, billId, state.orderHistory || []);
   const tableNo = targetTable.number;
 
-  // Deduct inventory stock for table order items
-  const deducted = deductStockForOrderItems(state.inventory || [], state.recipes || {}, state.inventoryLogs || [], items, billId);
+  // Deduct inventory stock ONLY if payment is completed (not Pending)
+  let nextInventory = state.inventory || [];
+  let nextLogs = state.inventoryLogs || [];
+  if (!isPending) {
+    const deducted = deductStockForOrderItems(nextInventory, state.recipes || {}, nextLogs, items, billId);
+    nextInventory = deducted.inventory;
+    nextLogs = deducted.inventoryLogs;
+  }
+
+  const newOrderRecord = {
+    id: billId,
+    source: `Table ${tableNo}`,
+    customerName,
+    customerId,
+    items,
+    ...totals,
+    grandTotal: finalTotal,
+    pointsRedeemed: redeemedPoints || 0,
+    paymentMode,
+    status,
+    serverConfirmed: Boolean(serverTxResult?.success),
+    ledgerId: serverTxResult?.ledger_id || null,
+    paidAt: isPending ? null : new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+  };
+
+  const newPaymentRecord = isPending ? null : {
+    id: serverTxResult?.payment_id || `pay_${billId}`,
+    orderId: billId,
+    amount: finalTotal,
+    mode: paymentMode,
+    status: "completed",
+    ledgerId: serverTxResult?.ledger_id || null,
+    idempotencyKey: serverTxResult?.idempotency_key || null,
+    createdAt: new Date().toISOString(),
+  };
 
   return {
     ...state,
     customers,
-    inventory: deducted.inventory,
-    inventoryLogs: deducted.inventoryLogs,
-    orderHistory: [...(state.orderHistory || []), {
-      id: billId,
-      source: `Table ${tableNo}`,
-      customerName,
-      customerId,
-      items,
-      ...totals,
-      grandTotal: finalTotal,
-      pointsRedeemed: redeemedPoints || 0,
-      paymentMode,
-      status: "Paid",
-      paidAt: new Date().toISOString(),
-    }],
+    inventory: nextInventory,
+    inventoryLogs: nextLogs,
+    orders: [...(state.orders || []).filter(o => o.id !== billId), newOrderRecord],
+    payments: newPaymentRecord ? [...(state.payments || []).filter(p => p.id !== newPaymentRecord.id), newPaymentRecord] : (state.payments || []),
+    orderHistory: [...(state.orderHistory || []).filter(o => o.id !== billId), newOrderRecord],
     tables: state.tables.map((t) => (t.id === tableId ? {
       ...t,
       status: "available",
@@ -434,7 +461,8 @@ export function addTable(state, table) {
     x: table.x ?? (Number(table.number || state.tables.length + 1) % 4) * 180 + 20,
     y: table.y ?? Math.floor(Number(table.number || state.tables.length + 1) / 4) * 160 + 20,
   };
-  return { ...state, tables: [...state.tables, newTable] };
+  const filteredTables = (state.tables || []).filter(t => t.id !== newTable.id && Number(t.number) !== Number(newTable.number));
+  return { ...state, tables: [...filteredTables, newTable] };
 }
 
 export function editTable(state, tableId, patch) {
@@ -611,7 +639,7 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
   let nextLogs = [...(inventoryLogs || [])];
 
   // IDEMPOTENCY GUARD: Skip duplicate inventory deductions for the same order reference
-  if (orderId && nextLogs.some((l) => l.orderRef === orderId && l.type === "Sale")) {
+  if (orderId && nextLogs.some((l) => (l.orderRef === orderId || l.orderId === orderId) && String(l.type).toUpperCase() === "SALE")) {
     return { inventory: nextInventory, inventoryLogs: nextLogs };
   }
 
@@ -622,46 +650,39 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
 
     if (recipe && Array.isArray(recipe) && recipe.length > 0) {
       recipe.forEach((req) => {
-        const invIdx = nextInventory.findIndex((i) => i.id === req.ingredientId);
+        const invIdx = nextInventory.findIndex((i) => i.id === req.ingredientId || i.name === req.ingredientName);
         if (invIdx >= 0) {
           const invItem = nextInventory[invIdx];
           const totalDeduction = req.qty * itemQty;
-          const updatedStock = Math.max(0, Math.round((invItem.currentStock - totalDeduction) * 1000) / 1000);
+          const currentQty = typeof invItem.qty === "number" ? invItem.qty : (typeof invItem.currentStock === "number" ? invItem.currentStock : 50);
+          const updatedStock = Math.max(0, Math.round((currentQty - totalDeduction) * 1000) / 1000);
           
           nextInventory[invIdx] = {
             ...invItem,
+            qty: updatedStock,
             currentStock: updatedStock
           };
 
+          const timestamp = new Date().toISOString();
+          const refText = `Order #${String(orderId).slice(-6)} (${item.name || "Item"} x${itemQty})`;
+
           nextLogs.unshift({
             id: makeId("log"),
-            orderRef: orderId,
+            organization_id: "00000000-0000-0000-0000-000000000001",
+            inventory_item_id: invItem.id,
+            inventory_item_name: invItem.name,
             ingredientId: invItem.id,
             ingredientName: invItem.name,
-            type: "Sale",
-            qty: -totalDeduction,
-            unit: invItem.unit,
-            reason: `Order #${String(orderId).slice(-6)} (${item.name || "Item"} x${itemQty})`,
-            supplier: invItem.supplier || "-",
-            cost: Math.round(totalDeduction * (invItem.costPrice || 0) * 100) / 100,
-            date: new Date().toISOString(),
+            type: "SALE",
+            orderRef: orderId,
+            orderId: orderId,
+            qty_change: -totalDeduction,
+            changeQty: -totalDeduction,
+            reason: `Sale deduction for ${refText}`,
+            timestamp,
+            createdAt: timestamp
           });
         }
-      });
-    } else {
-      // PART 27: Log warning for item with no recipe configured without breaking payment
-      nextLogs.unshift({
-        id: makeId("log"),
-        orderRef: orderId,
-        ingredientId: "-",
-        ingredientName: item.name || "Item",
-        type: "Warning",
-        qty: 0,
-        unit: "-",
-        reason: `Recipe not configured for ${item.name || "Item"} (Order #${String(orderId).slice(-6)})`,
-        supplier: "-",
-        cost: 0,
-        date: new Date().toISOString(),
       });
     }
   });
@@ -669,15 +690,18 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
   return { inventory: nextInventory, inventoryLogs: nextLogs };
 }
 
-export function createBill(state, billData) {
+export function createBill(state, billData, serverTxResult = null) {
   const { customers, customerId } = applyLoyalty(
-    state.customers, 
-    billData.phone, 
-    billData.grandTotal || 0, 
-    billData.pointsRedeemed || 0
+    state.customers,
+    billData.phone,
+    billData.grandTotal,
+    billData.pointsRedeemed,
+    state.settings,
+    billData.id,
+    state.orderHistory
   );
 
-  const billId = billData.id || makeId("o");
+  const billId = serverTxResult?.order_id || billData.id || makeId("o");
   const newBill = {
     id: billId,
     source: billData.source || "POS Order",
@@ -692,8 +716,22 @@ export function createBill(state, billData) {
     grandTotal: billData.grandTotal || 0,
     pointsRedeemed: billData.pointsRedeemed || 0,
     paymentMode: billData.paymentMode || "Cash",
+    paymentBreakdown: billData.paymentBreakdown || null,
     status: billData.status || "Paid",
+    serverConfirmed: Boolean(serverTxResult?.success),
+    ledgerId: serverTxResult?.ledger_id || null,
     paidAt: billData.paidAt || new Date().toISOString(),
+  };
+
+  const newPaymentRecord = billData.status === "Pending" ? null : {
+    id: serverTxResult?.payment_id || `pay_${billId}`,
+    orderId: billId,
+    amount: billData.grandTotal,
+    mode: billData.paymentMode || "Cash",
+    status: "completed",
+    ledgerId: serverTxResult?.ledger_id || null,
+    idempotencyKey: serverTxResult?.idempotency_key || null,
+    createdAt: new Date().toISOString(),
   };
 
   // Deduct inventory if bill status is Paid
@@ -711,6 +749,7 @@ export function createBill(state, billData) {
     customers,
     inventory: nextInventory,
     inventoryLogs: nextLogs,
+    payments: newPaymentRecord ? [...(state.payments || []).filter(p => p.id !== newPaymentRecord.id), newPaymentRecord] : (state.payments || []),
     orderHistory: [newBill, ...(state.orderHistory || [])]
   };
 }
@@ -721,6 +760,7 @@ export function updateBillStatus(state, billId, newStatus) {
 
   const nextHistory = (state.orderHistory || []).map((b) => {
     if (b.id === billId) {
+      if (b.status === newStatus) return b;
       // If transition from Pending -> Paid, deduct stock
       if (b.status !== "Paid" && newStatus === "Paid") {
         const deducted = deductStockForOrderItems(nextInventory, state.recipes, nextLogs, b.items || [], billId);
@@ -762,7 +802,7 @@ export function generatePendingBill(state, pendingData) {
   };
 }
 
-export function payPendingBill(state, pendingBillId, paymentMode = "Cash", splitBreakdown = null) {
+export function payPendingBill(state, pendingBillId, paymentMode = "Cash", splitBreakdown = null, serverTxResult = null) {
   const pendingBill = (state.pendingBills || []).find(b => b.id === pendingBillId);
   if (!pendingBill) return state;
 
@@ -771,7 +811,20 @@ export function payPendingBill(state, pendingBillId, paymentMode = "Cash", split
     status: "Paid",
     paymentMode: Array.isArray(splitBreakdown) ? "Split" : paymentMode,
     paymentBreakdown: Array.isArray(splitBreakdown) ? splitBreakdown : [{ method: paymentMode, amount: pendingBill.grandTotal }],
+    serverConfirmed: Boolean(serverTxResult?.success),
+    ledgerId: serverTxResult?.ledger_id || null,
     paidAt: new Date().toISOString(),
+  };
+
+  const newPaymentRecord = {
+    id: serverTxResult?.payment_id || `pay_${pendingBillId}`,
+    orderId: pendingBillId,
+    amount: pendingBill.grandTotal,
+    mode: paidBill.paymentMode,
+    status: "completed",
+    ledgerId: serverTxResult?.ledger_id || null,
+    idempotencyKey: serverTxResult?.idempotency_key || null,
+    createdAt: new Date().toISOString(),
   };
 
   const deducted = deductStockForOrderItems(state.inventory || [], state.recipes || {}, state.inventoryLogs || [], pendingBill.items || [], pendingBillId);
@@ -780,10 +833,11 @@ export function payPendingBill(state, pendingBillId, paymentMode = "Cash", split
     ...state,
     inventory: deducted.inventory,
     inventoryLogs: deducted.inventoryLogs,
+    payments: [...(state.payments || []).filter(p => p.id !== newPaymentRecord.id), newPaymentRecord],
     pendingBills: (state.pendingBills || []).filter(b => b.id !== pendingBillId),
     orderHistory: [paidBill, ...(state.orderHistory || [])]
   };
-}
+};
 
 // --- Inventory & Recipes --------------------------------------------------
 
@@ -836,32 +890,48 @@ export function addPurchaseEntry(state, purchaseData) {
 
   let ingredientName = "Item";
   let unit = "pcs";
+  let prevStock = 0;
+  let newStock = 0;
 
   const nextInventory = (state.inventory || []).map((item) => {
     if (item.id === ingredientId) {
       ingredientName = item.name;
       unit = item.unit;
+      prevStock = item.currentStock || 0;
+      newStock = Math.round((prevStock + qtyNum) * 1000) / 1000;
       return {
         ...item,
-        currentStock: Math.round((item.currentStock + qtyNum) * 1000) / 1000,
+        currentStock: newStock,
         supplier: supplier || item.supplier
       };
     }
     return item;
   });
 
+  const timestamp = date || new Date().toISOString();
+  const refText = invoiceNo ? `Invoice #${invoiceNo}` : "Purchase Entry";
+
   const newLog = {
     id: makeId("log"),
+    organization_id: state?.organization_id || "00000000-0000-0000-0000-000000000001",
+    inventory_item_id: ingredientId,
+    inventory_item_name: ingredientName,
     ingredientId,
     ingredientName,
-    type: "Purchase",
+    type: "PURCHASE",
+    quantity: qtyNum,
     qty: qtyNum,
     unit,
-    reason: invoiceNo ? `Invoice #${invoiceNo}` : "Purchase Entry",
+    previous_stock: prevStock,
+    new_stock: newStock,
+    timestamp,
+    date: timestamp,
+    reference: refText,
+    reason: refText,
+    created_by: "Owner",
     supplier: supplier || "-",
     cost: costNum,
     notes: notes || "",
-    date: date || new Date().toISOString(),
   };
 
   return {
@@ -872,21 +942,25 @@ export function addPurchaseEntry(state, purchaseData) {
 }
 
 export function adjustStock(state, adjustmentData) {
-  const { ingredientId, qty, type, reason, date } = adjustmentData; // type: Wastage, Damage, Staff, Adjustment
-  const qtyNum = Number(qty) || 0; // Positive quantity provided by user
+  const { ingredientId, qty, type, reason, date } = adjustmentData;
+  const qtyNum = Number(qty) || 0;
 
   let ingredientName = "Item";
   let unit = "pcs";
   let costPrice = 0;
+  let prevStock = 0;
+  let newStock = 0;
 
-  const deltaQty = type === "Adjustment" ? qtyNum : -qtyNum;
+  const normalizedType = (type || "ADJUSTMENT").toUpperCase();
+  const deltaQty = normalizedType === "ADJUSTMENT" ? qtyNum : -qtyNum;
 
   const nextInventory = (state.inventory || []).map((item) => {
     if (item.id === ingredientId) {
       ingredientName = item.name;
       unit = item.unit;
       costPrice = item.costPrice || 0;
-      const newStock = type === "Adjustment" ? qtyNum : Math.max(0, item.currentStock - qtyNum);
+      prevStock = item.currentStock || 0;
+      newStock = normalizedType === "ADJUSTMENT" ? qtyNum : Math.max(0, prevStock - qtyNum);
       return {
         ...item,
         currentStock: Math.round(newStock * 1000) / 1000
@@ -895,17 +969,29 @@ export function adjustStock(state, adjustmentData) {
     return item;
   });
 
+  const timestamp = date || new Date().toISOString();
+  const refText = reason || normalizedType;
+
   const newLog = {
     id: makeId("log"),
+    organization_id: state?.organization_id || "00000000-0000-0000-0000-000000000001",
+    inventory_item_id: ingredientId,
+    inventory_item_name: ingredientName,
     ingredientId,
     ingredientName,
-    type: type || "Adjustment",
+    type: normalizedType,
+    quantity: deltaQty,
     qty: deltaQty,
     unit,
-    reason: reason || type,
+    previous_stock: prevStock,
+    new_stock: newStock,
+    timestamp,
+    date: timestamp,
+    reference: refText,
+    reason: refText,
+    created_by: "Staff",
     supplier: "-",
     cost: Math.round(Math.abs(deltaQty) * costPrice * 100) / 100,
-    date: date || new Date().toISOString(),
   };
 
   return {
@@ -920,9 +1006,15 @@ export function adjustStock(state, adjustmentData) {
 export function addEmployee(state, employeeData) {
   const employees = state.employees || [];
   
-  // Enforce PIN uniqueness if provided
-  if (employeeData.pin && employees.some(e => e.pin === employeeData.pin)) {
-    throw new Error("PIN is already assigned to another employee.");
+  // Enforce PIN uniqueness across active employees
+  if (employeeData.pin) {
+    const cleanPin = String(employeeData.pin).trim();
+    const existing = employees.find(
+      e => String(e.pin).trim() === cleanPin && e.status !== "disabled" && e.status !== "Inactive"
+    );
+    if (existing) {
+      throw new Error("PIN is already assigned to another active employee.");
+    }
   }
 
   const id = makeId("emp");
@@ -935,15 +1027,15 @@ export function addEmployee(state, employeeData) {
     email: employeeData.email || "",
     role: employeeData.role || "Staff",
     department: employeeData.department || "Operations",
-    pin: employeeData.pin || "0000",
+    pin: String(employeeData.pin || "0000").trim(),
     status: "active",
     joinedAt: new Date().toISOString().slice(0, 10),
   };
 
   // Sync with state.users so login works out of the box
   const nextUsers = [
-    ...(state.users || []).filter(u => u.id !== id),
-    { id, name: newEmp.name, pin: newEmp.pin, role: newEmp.role }
+    ...(state.users || []).filter(u => u.id !== id && u.pin !== newEmp.pin),
+    { id, name: newEmp.name, pin: newEmp.pin, role: newEmp.role, status: "active", active: true }
   ];
 
   return {
@@ -955,33 +1047,60 @@ export function addEmployee(state, employeeData) {
 
 export function editEmployee(state, employeeData) {
   const employees = state.employees || [];
+  const oldEmp = employees.find(e => e.id === employeeData.id);
   
   if (employeeData.pin) {
-    const existing = employees.find(e => e.pin === employeeData.pin && e.id !== employeeData.id);
+    const cleanPin = String(employeeData.pin).trim();
+    const existing = employees.find(
+      e => String(e.pin).trim() === cleanPin &&
+           e.id !== employeeData.id &&
+           e.status !== "disabled" &&
+           e.status !== "Inactive"
+    );
     if (existing) {
-      throw new Error("PIN is already assigned to another employee.");
+      throw new Error("PIN is already assigned to another active employee.");
     }
   }
 
   const updatedEmployees = employees.map(e => {
     if (e.id === employeeData.id) {
-      return { ...e, ...employeeData };
+      return { ...e, ...employeeData, pin: String(employeeData.pin || e.pin).trim() };
     }
     return e;
   });
 
-  // Sync state.users
+  // Sync state.users comprehensively (match by id, name, pin, or legacy role/pin pair)
+  let updatedUsers = false;
   const nextUsers = (state.users || []).map(u => {
-    if (u.id === employeeData.id || u.name === employeeData.name) {
+    const isMatch = u.id === employeeData.id ||
+                    (oldEmp && (u.name === oldEmp.name || u.pin === oldEmp.pin)) ||
+                    (employeeData.name && u.name === employeeData.name) ||
+                    (employeeData.pin && u.pin === String(employeeData.pin).trim());
+    if (isMatch) {
+      updatedUsers = true;
       return {
         ...u,
+        id: employeeData.id || u.id,
         name: employeeData.name || u.name,
-        pin: employeeData.pin || u.pin,
-        role: employeeData.role || u.role
+        pin: String(employeeData.pin || u.pin).trim(),
+        role: employeeData.role || u.role,
+        status: employeeData.status || u.status || "active",
+        active: (employeeData.status || u.status) !== "disabled"
       };
     }
     return u;
   });
+
+  if (!updatedUsers && employeeData.id) {
+    nextUsers.push({
+      id: employeeData.id,
+      name: employeeData.name || (oldEmp ? oldEmp.name : "Employee"),
+      pin: String(employeeData.pin || (oldEmp ? oldEmp.pin : "0000")).trim(),
+      role: employeeData.role || (oldEmp ? oldEmp.role : "Staff"),
+      status: "active",
+      active: true
+    });
+  }
 
   return {
     ...state,
@@ -991,17 +1110,27 @@ export function editEmployee(state, employeeData) {
 }
 
 export function toggleEmployeeStatus(state, employeeId) {
+  let targetEmp = null;
   const employees = (state.employees || []).map(e => {
     if (e.id === employeeId) {
       const nextStatus = e.status === "active" ? "disabled" : "active";
-      return { ...e, status: nextStatus };
+      targetEmp = { ...e, status: nextStatus };
+      return targetEmp;
     }
     return e;
   });
 
+  const nextUsers = (state.users || []).map(u => {
+    if (targetEmp && (u.id === targetEmp.id || u.pin === targetEmp.pin || u.name === targetEmp.name)) {
+      return { ...u, status: targetEmp.status, active: targetEmp.status === "active" };
+    }
+    return u;
+  });
+
   return {
     ...state,
-    employees
+    employees,
+    users: nextUsers
   };
 }
 
@@ -1160,5 +1289,76 @@ export function restoreBackup(state, restoredPayload, employeeName = "Owner") {
     ...defaultState(),
     ...restoredData,
     activityLogs: [logEntry, ...(restoredData.activityLogs || [])]
+  };
+}
+
+export function refundOrder(state, orderId, refundAmount, reason = "Customer refund", staffRole = "Manager", serverTxResult = null) {
+  if (staffRole && !["Owner", "Manager"].includes(staffRole)) {
+    throw new Error(`UNAUTHORIZED_ROLE: Role '${staffRole}' does not have refund authorization permissions.`);
+  }
+
+  const orders = state.orders || [];
+  const orderHistory = state.orderHistory || [];
+  const targetOrder = orders.find(o => o.id === orderId) || orderHistory.find(o => o.id === orderId);
+
+  if (!targetOrder) {
+    throw new Error(`Order ${orderId} not found.`);
+  }
+
+  const existingRefunds = (state.refunds || []).filter(r => r.orderId === orderId);
+  const totalAlreadyRefunded = existingRefunds.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const originalPaid = Number(targetOrder.grandTotal || targetOrder.total || 0);
+
+  if (targetOrder.status === "Refunded" || targetOrder.status === "REFUNDED" || totalAlreadyRefunded >= originalPaid) {
+    throw new Error("Order has already been fully refunded.");
+  }
+
+  const requestedAmount = Number(refundAmount || originalPaid);
+  if (requestedAmount <= 0) {
+    throw new Error("INVALID_REFUND_AMOUNT: Refund amount must be greater than zero.");
+  }
+
+  if (requestedAmount + totalAlreadyRefunded > originalPaid) {
+    throw new Error(`OVER_REFUND_REJECTED: Refund amount (₹${requestedAmount}) exceeds remaining refundable amount (₹${originalPaid - totalAlreadyRefunded}).`);
+  }
+
+  const isFullRefund = (requestedAmount + totalAlreadyRefunded) >= originalPaid;
+  const newStatus = isFullRefund ? "Refunded" : "Partially Refunded";
+
+  const refundId = serverTxResult?.refund_id || makeId("ref");
+  const ledgerId = serverTxResult?.ledger_id || null;
+  const timestamp = new Date().toISOString();
+
+  const newRefundRecord = {
+    id: refundId,
+    orderId,
+    amount: requestedAmount,
+    reason,
+    serverConfirmed: Boolean(serverTxResult?.success),
+    ledgerId,
+    idempotencyKey: serverTxResult?.idempotency_key || null,
+    createdAt: timestamp
+  };
+
+  const refundPaymentRecord = {
+    id: `pay_ref_${refundId}`,
+    orderId,
+    amount: -requestedAmount,
+    mode: "Refund",
+    status: "refunded",
+    ledgerId,
+    idempotencyKey: serverTxResult?.idempotency_key || null,
+    createdAt: timestamp
+  };
+
+  const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: newStatus, refundedAmount: (o.refundedAmount || 0) + requestedAmount } : o);
+  const updatedHistory = orderHistory.map(o => o.id === orderId ? { ...o, status: newStatus, refundedAmount: (o.refundedAmount || 0) + requestedAmount } : o);
+
+  return {
+    ...state,
+    orders: updatedOrders,
+    orderHistory: updatedHistory,
+    refunds: [...(state.refunds || []), newRefundRecord],
+    payments: [...(state.payments || []), refundPaymentRecord]
   };
 }

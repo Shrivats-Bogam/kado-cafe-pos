@@ -157,6 +157,77 @@ export function getCurrentMemberProfile() {
   return currentMemberProfile;
 }
 
+/**
+ * Authenticate employee using PIN code
+ * @param {object} employee Employee object containing pin and status
+ * @param {string} pin Provided 4-digit PIN string
+ * @returns {object} Employee object if valid
+ */
+export function authenticateLocalPin(employee, pin) {
+  if (!employee) throw new Error("Invalid employee");
+  if (employee.status === "disabled" || employee.status === "Inactive") {
+    throw new Error("Account disabled");
+  }
+  if (String(employee.pin || "") !== String(pin || "")) {
+    throw new Error("Wrong PIN");
+  }
+  return employee;
+}
+
+/**
+ * Resolve authoritative employee record from state employees
+ * @param {Array} employees State employees list
+ * @param {object} user Selected user object
+ * @returns {object} Authoritative employee record
+ */
+export function resolveLocalUserIdentity(employees, user) {
+  if (!user) return null;
+  const emp = (employees || []).find((e) => (e.id && e.id === user.id) || (e.pin && e.pin === user.pin));
+  if (emp && (emp.status === "disabled" || emp.status === "Inactive")) {
+    throw new Error("Account disabled");
+  }
+  return emp || user;
+}
+
+/**
+ * Build standardized user identity object for authenticated cloud user
+ * @param {object} params
+ * @returns {object}
+ */
+export function buildCloudUserIdentity({ user, organization_id, role, member }) {
+  if (!user || !organization_id || !role) throw new Error("Invalid cloud user payload");
+  return {
+    id: user.id,
+    email: user.email,
+    organization_id,
+    role,
+    member,
+  };
+}
+
+/**
+ * Manage employee in Supabase Cloud via Edge Function
+ * @param {object} supabaseClient
+ * @param {object} params { action: 'provision'|'update'|'toggle-status', ... }
+ * @returns {Promise<object>}
+ */
+export async function manageEmployeeCloud(supabaseClient, params) {
+  if (!supabaseClient || typeof supabaseClient.functions?.invoke !== "function") {
+    return null;
+  }
+  const { data, error } = await supabaseClient.functions.invoke("manage-employee", {
+    body: params,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to manage employee in cloud");
+  }
+  if (data && data.success === false) {
+    throw new Error(data.error || "Cloud employee operation failed");
+  }
+  return data?.data || data;
+}
+
 // --- Local Storage Cache Helpers ---
 
 function getCachedAuthSession() {
@@ -180,5 +251,7 @@ function clearCachedAuthSession() {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem("kado-cafe-state");
+    localStorage.removeItem("kado-cafe-e2e-state");
   } catch { /* ignore */ }
 }

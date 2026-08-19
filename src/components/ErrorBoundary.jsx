@@ -1,10 +1,10 @@
 import React from "react";
-import { AlertOctagon, RotateCcw, Home } from "lucide-react";
+import { logApplicationError } from "../lib/observability.js";
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -12,51 +12,37 @@ export class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Kado Cafe ErrorBoundary caught an exception:", error, errorInfo);
+    this.setState({ errorInfo });
+    logApplicationError(error, {
+      operation: "REACT_RENDER_CRASH",
+      errorCode: "UI_RENDER_ERROR",
+      details: { componentStack: errorInfo?.componentStack }
+    });
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null });
-    window.location.reload();
+    this.setState({ hasError: false, error: null, errorInfo: null });
   };
 
-  handleHome = () => {
-    this.setState({ hasError: false, error: null });
-    window.location.href = window.location.origin + window.location.pathname;
+  handleReload = () => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
   };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-stone-950 text-stone-100 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-2xl flex flex-col items-center text-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-1">
-              <AlertOctagon size={28} />
-            </div>
-            
-            <h2 className="font-serif text-xl font-bold text-stone-50">Something went wrong</h2>
-            <p className="text-xs text-stone-400 leading-relaxed">
-              An unexpected error occurred in Kado Cafe. Your data is safe in local storage. Please try reloading or returning to the dashboard.
-            </p>
-
-            <div className="flex gap-2 w-full mt-2">
-              <button
-                type="button"
-                onClick={this.handleHome}
-                className="flex-1 min-h-[44px] rounded-xl border border-stone-700 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-              >
-                <Home size={15} />
-                <span>Dashboard</span>
-              </button>
-              <button
-                type="button"
-                onClick={this.handleReset}
-                className="flex-1 min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition"
-              >
-                <RotateCcw size={15} />
-                <span>Try Again</span>
-              </button>
-            </div>
+        <div style={{ padding: "40px", fontFamily: "sans-serif", textAlign: "center", backgroundColor: "#fff5f5", color: "#c53030", borderRadius: "8px", margin: "20px" }}>
+          <h2 style={{ fontSize: "24px", marginBottom: "12px" }}>Something went wrong</h2>
+          <p style={{ marginBottom: "20px" }}>An unforeseen error occurred in this section of Kado Cafe POS.</p>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+            <button onClick={this.handleReset} style={{ padding: "10px 18px", backgroundColor: "#3182ce", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}>
+              Try Again
+            </button>
+            <button onClick={this.handleReload} style={{ padding: "10px 18px", backgroundColor: "#e2e8f0", color: "#2d3748", border: "none", borderRadius: "6px", cursor: "pointer" }}>
+              Reload Application
+            </button>
           </div>
         </div>
       );
@@ -65,3 +51,5 @@ export class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;

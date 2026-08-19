@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Printer, Check, RefreshCw, AlertCircle } from "lucide-react";
 import { Card, IconButton, PrimaryButton } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
@@ -8,10 +8,17 @@ import { useMenuIndex } from "../lib/menuIndex.js";
 export default function BillModal({ title, customerName, cart = [], menuItems = [], totals, customers = [], onClose, onConfirm }) {
   const [paymentMode, setPaymentMode] = useState("Cash"); // Cash, UPI, Card, Split, Pending
   const [cashReceived, setCashReceived] = useState("");
+  
+  // Split Payment Inputs
+  const [splitCash, setSplitCash] = useState("");
+  const [splitUpi, setSplitUpi] = useState("");
+  const [splitCard, setSplitCard] = useState("");
+
   const [phone, setPhone] = useState("");
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [printWidth, setPrintWidth] = useState("80mm");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const invoiceNo = "INV-" + Math.floor(1000 + Math.random() * 9000);
   const idx = useMenuIndex(menuItems);
@@ -23,18 +30,36 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
   // Cash Validation & Change Calculation
   const cashNum = parseFloat(cashReceived) || 0;
   const cashChange = cashNum > 0 ? Math.max(0, cashNum - finalTotal) : 0;
-  const isCashUnderpaid = paymentMode === "Cash" && cashNum > 0 && cashNum < finalTotal;
+  const isCashUnderpaid = paymentMode === "Cash" && cashNum < finalTotal;
 
-  const canConfirm = !isSubmitting && (!isCashUnderpaid || paymentMode === "Pending");
+  // Split Payment Total Calculation
+  const splitCashNum = Math.max(0, parseFloat(splitCash) || 0);
+  const splitUpiNum = Math.max(0, parseFloat(splitUpi) || 0);
+  const splitCardNum = Math.max(0, parseFloat(splitCard) || 0);
+  const splitSum = splitCashNum + splitUpiNum + splitCardNum;
+  const splitDiff = Math.round((finalTotal - splitSum) * 100) / 100;
+  const isSplitValid = paymentMode !== "Split" || (Math.abs(splitDiff) < 0.01 && splitSum > 0);
 
-  const handleConfirmPay = () => {
+  const canConfirm = !isSubmitting && (!isCashUnderpaid || paymentMode === "Pending") && isSplitValid;
+
+  const handleConfirmPay = async () => {
     if (!canConfirm || isSubmitting) return;
 
     setIsSubmitting(true);
+    setErrorMessage("");
     try {
-      onConfirm(paymentMode, phone, redeemPoints ? pointsValue : 0);
+      const splitBreakdown = paymentMode === "Split" ? [
+        { method: "Cash", amount: splitCashNum },
+        { method: "UPI", amount: splitUpiNum },
+        { method: "Card", amount: splitCardNum }
+      ].filter(p => p.amount > 0) : null;
+
+      await onConfirm(paymentMode, phone, redeemPoints ? pointsValue : 0, splitBreakdown);
+    } catch (err) {
+      console.error("[BillModal] Payment confirmation error:", err);
+      setErrorMessage(err.message || "Failed to settle payment on server. Bill not marked as paid.");
     } finally {
-      setTimeout(() => setIsSubmitting(false), 500);
+      setIsSubmitting(false);
     }
   };
 
@@ -53,6 +78,14 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
             </svg>
           </IconButton>
         </div>
+
+        {/* Error Alert */}
+        {errorMessage && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Source & Customer Title */}
         <div className="text-sm font-semibold text-stone-200">
@@ -110,6 +143,7 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
               <button
                 key={p}
                 type="button"
+                data-testid={`pay-mode-${p.toLowerCase()}`}
                 onClick={() => setPaymentMode(p)}
                 className={`rounded-xl py-2 text-xs font-bold border transition cursor-pointer ${
                   paymentMode === p
@@ -123,6 +157,50 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
           </div>
         </div>
 
+        {/* Split Payment Inputs */}
+        {paymentMode === "Split" && (
+          <div className="bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-2">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-stone-400 font-semibold">Split Breakdown</span>
+              <span className={`text-xs font-mono font-bold ${Math.abs(splitDiff) < 0.01 ? "text-emerald-400" : "text-rose-400"}`}>
+                {Math.abs(splitDiff) < 0.01 ? "✓ Balanced" : `Diff: ${currency(splitDiff)}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] text-stone-400 block mb-0.5">Cash (₹)</label>
+                <input
+                  type="number"
+                  value={splitCash}
+                  onChange={(e) => setSplitCash(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2 py-1 text-xs font-mono text-stone-100"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-stone-400 block mb-0.5">UPI (₹)</label>
+                <input
+                  type="number"
+                  value={splitUpi}
+                  onChange={(e) => setSplitUpi(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2 py-1 text-xs font-mono text-stone-100"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-stone-400 block mb-0.5">Card (₹)</label>
+                <input
+                  type="number"
+                  value={splitCard}
+                  onChange={(e) => setSplitCard(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2 py-1 text-xs font-mono text-stone-100"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Cash Received & Change Calculation */}
         {paymentMode === "Cash" && (
           <div className="bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-2">
@@ -130,6 +208,7 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
             <div className="flex gap-2">
               <input
                 type="number"
+                data-testid="cash-received-input"
                 value={cashReceived}
                 onChange={(e) => setCashReceived(e.target.value)}
                 placeholder={`e.g. ${finalTotal}`}
@@ -182,6 +261,7 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
           </button>
           <PrimaryButton
             disabled={!canConfirm}
+            data-testid="confirm-payment-btn"
             onClick={handleConfirmPay}
             className="min-h-[44px] text-xs font-bold cursor-pointer"
           >

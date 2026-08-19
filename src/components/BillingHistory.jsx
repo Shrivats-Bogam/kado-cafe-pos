@@ -1,11 +1,25 @@
 import { useState, useMemo } from "react";
-import { Search, DollarSign, CreditCard, QrCode, AlertCircle, RefreshCw, XCircle, Eye, Receipt } from "lucide-react";
-import { Card } from "./ui.jsx";
+import { Search, Receipt, Calendar, CreditCard, Banknote, QrCode, AlertCircle, Eye, RefreshCw, XCircle, RotateCcw, X, ShieldAlert } from "lucide-react";
+import { Card, PrimaryButton, IconButton } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
 
-export default function BillingHistory({ orderHistory = [], onSelectBill, onUpdateBillStatus }) {
+export default function BillingHistory({ 
+  orderHistory = [], 
+  refunds = [],
+  currentUser = null,
+  onSelectBill, 
+  onUpdateBillStatus,
+  onProcessRefund 
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All"); // All, Paid, Pending, Cancelled, Refunded
+  
+  // Refund Modal State
+  const [refundTarget, setRefundTarget] = useState(null); // { bill, refundableAmount }
+  const [refundAmountInput, setRefundAmountInput] = useState("");
+  const [refundReasonInput, setRefundReasonInput] = useState("Customer Return");
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundError, setRefundError] = useState("");
 
   // Calculate Daily Revenue Summary stats (PART 18)
   const dailySummary = useMemo(() => {
@@ -57,7 +71,7 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
     };
   }, [orderHistory]);
 
-  // Filter & Search Orders (PART 17)
+  // Filter & Search Orders
   const filteredHistory = useMemo(() => {
     return orderHistory.filter((bill) => {
       // Status Filter
@@ -80,9 +94,62 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
     }).sort((a, b) => new Date(b.paidAt || b.createdAt || 0) - new Date(a.paidAt || a.createdAt || 0));
   }, [orderHistory, statusFilter, searchQuery]);
 
+  // Open Refund Modal for a Bill
+  const handleOpenRefundModal = (bill) => {
+    const originalPaid = Number(bill.grandTotal || bill.total || 0);
+    const existingRefunds = (refunds || []).filter(r => r.orderId === bill.id);
+    const alreadyRefunded = existingRefunds.reduce((sum, r) => sum + Number(r.amount || 0), 0) + Number(bill.refundedAmount || 0);
+    const remaining = Math.max(0, originalPaid - alreadyRefunded);
+
+    setRefundTarget({ bill, originalPaid, alreadyRefunded, refundableAmount: remaining });
+    setRefundAmountInput(String(remaining));
+    setRefundReasonInput("Customer Return");
+    setRefundError("");
+  };
+
+  // Submit Server Refund
+  const handleConfirmRefund = async () => {
+    if (!refundTarget || isRefunding) return;
+
+    const amt = parseFloat(refundAmountInput);
+    if (isNaN(amt) || amt <= 0) {
+      setRefundError("Please enter a valid refund amount greater than ₹0.");
+      return;
+    }
+
+    if (amt > refundTarget.refundableAmount) {
+      setRefundError(`Refund amount cannot exceed remaining balance of ${currency(refundTarget.refundableAmount)}.`);
+      return;
+    }
+
+    if (!refundReasonInput.trim()) {
+      setRefundError("Please enter a reason for the refund.");
+      return;
+    }
+
+    setIsRefunding(true);
+    setRefundError("");
+
+    try {
+      if (onProcessRefund) {
+        await onProcessRefund({
+          orderId: refundTarget.bill.id,
+          refundAmount: amt,
+          reason: refundReasonInput.trim()
+        });
+      }
+      setRefundTarget(null);
+    } catch (err) {
+      console.error("[BillingHistory] Refund error:", err);
+      setRefundError(err.message || "Server refund failed. Order remains un-refunded.");
+    } finally {
+      setIsRefunding(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Daily Revenue Summary Metrics Cards (PART 18) */}
+      {/* Daily Revenue Summary Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <Card className="p-3 bg-stone-900 border-stone-800 flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider">Revenue</span>
@@ -112,48 +179,49 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
 
         <Card className="p-3 bg-stone-900 border-stone-800 flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1 uppercase tracking-wider">
-            <AlertCircle size={12} /> Pending
+            <Receipt size={12} /> Pending
           </span>
-          <span className="text-sm font-bold text-amber-300 font-mono">{currency(dailySummary.pendingTotal)}</span>
+          <span className="text-sm font-bold text-stone-200 font-mono">{currency(dailySummary.pendingTotal)}</span>
         </Card>
 
         <Card className="p-3 bg-stone-900 border-stone-800 flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-rose-400 flex items-center gap-1 uppercase tracking-wider">
-            Discounts
+            <XCircle size={12} /> Cancelled
           </span>
-          <span className="text-sm font-bold text-stone-300 font-mono">-{currency(dailySummary.discountTotal)}</span>
+          <span className="text-sm font-bold text-stone-200 font-mono">{currency(dailySummary.cancelledTotal)}</span>
         </Card>
 
         <Card className="p-3 bg-stone-900 border-stone-800 flex flex-col gap-1">
-          <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-            Cancelled
+          <span className="text-[11px] font-semibold text-pink-400 flex items-center gap-1 uppercase tracking-wider">
+            <RotateCcw size={12} /> Refunded
           </span>
-          <span className="text-sm font-bold text-stone-400 font-mono">{currency(dailySummary.cancelledTotal)}</span>
+          <span className="text-sm font-bold text-stone-200 font-mono">{currency(dailySummary.refundedTotal)}</span>
         </Card>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 bg-stone-900 p-3 rounded-2xl border border-stone-800">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" size={16} />
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full sm:w-80">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by Bill #, Customer, Table, Phone, or Date..."
-            className="w-full bg-stone-950 border border-stone-800 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
+            placeholder="Search bill #, table, customer..."
+            className="w-full pl-9 pr-4 py-2 bg-stone-900 border border-stone-800 rounded-xl text-xs text-stone-200 focus:outline-none focus:border-amber-500"
           />
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
-          {["All", "Paid", "Pending", "Cancelled", "Refunded"].map((st) => (
+        <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto pb-1">
+          {["All", "Paid", "Partially Refunded", "Pending", "Cancelled", "Refunded"].map((st) => (
             <button
               key={st}
+              type="button"
               onClick={() => setStatusFilter(st)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition min-h-[44px] cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 statusFilter === st
-                  ? "bg-amber-500 text-stone-950 shadow-md"
-                  : "bg-stone-950 border border-stone-800 text-stone-400 hover:bg-stone-800 hover:text-stone-200"
+                  ? "bg-amber-500 text-stone-950 shadow-sm"
+                  : "bg-stone-900 text-stone-400 hover:bg-stone-800 border border-stone-800"
               }`}
             >
               {st}
@@ -162,36 +230,32 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
         </div>
       </div>
 
-      {/* Bill History Grid */}
+      {/* Bills Grid */}
       {filteredHistory.length === 0 ? (
-        /* Purposeful Empty State (PART 23) */
-        <div className="flex flex-col items-center justify-center p-12 bg-stone-900/60 border border-stone-800 rounded-3xl text-center select-none pointer-events-none my-4">
-          <div className="w-16 h-16 rounded-2xl bg-stone-800/80 border border-stone-700/50 flex items-center justify-center text-amber-500 mb-3 shadow-inner">
-            <Receipt size={32} />
-          </div>
-          <h3 className="font-serif text-lg font-bold text-stone-200 mb-1">No Bills Found</h3>
-          <p className="text-xs text-stone-400 max-w-xs leading-relaxed">
-            Completed, pending, or historical transactions will appear here.
-          </p>
-        </div>
+        <Card className="p-12 text-center text-stone-500 bg-stone-900/50 border-stone-800 flex flex-col items-center gap-2">
+          <Receipt size={36} className="opacity-30" />
+          <p className="text-sm font-semibold">No bills found</p>
+          <p className="text-xs text-stone-600">Try adjusting your search query or filter criteria</p>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredHistory.map((bill) => {
             const st = bill.status || "Paid";
             return (
-              <Card key={bill.id} className="p-4 bg-stone-900 border-stone-800 flex flex-col justify-between gap-3 shadow-sm hover:border-stone-700 transition">
+              <Card key={bill.id} className="p-4 bg-stone-900 border-stone-800 flex flex-col justify-between gap-3 hover:border-stone-700 transition">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="font-mono text-xs font-bold text-amber-400">{bill.id}</span>
-                    <span className="text-[11px] text-stone-400 block mt-0.5 font-mono">
-                      {new Date(bill.paidAt || bill.createdAt || Date.now()).toLocaleString()}
+                    <span className="text-xs font-mono font-bold text-amber-400 block">#{bill.id}</span>
+                    <span className="text-[11px] text-stone-400">
+                      {bill.paidAt ? new Date(bill.paidAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(bill.createdAt || 0).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <span className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-full border ${
-                    st === "Paid" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
-                    st === "Pending" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
-                    st === "Cancelled" ? "bg-rose-500/15 text-rose-400 border-rose-500/30" :
-                    "bg-purple-500/15 text-purple-400 border-purple-500/30"
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    st === "Paid" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
+                    st === "Partially Refunded" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" :
+                    st === "Pending" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                    st === "Refunded" ? "bg-pink-500/20 text-pink-400 border border-pink-500/30" :
+                    "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                   }`}>
                     {st}
                   </span>
@@ -211,6 +275,7 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
                         <button
                           type="button"
                           onClick={() => onUpdateBillStatus(bill.id, "Paid")}
+                          data-testid={`pay-pending-${bill.id}`}
                           className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                           title="Mark Pending Bill as Paid"
                         >
@@ -219,6 +284,7 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
                         <button
                           type="button"
                           onClick={() => onUpdateBillStatus(bill.id, "Cancelled")}
+                          data-testid={`cancel-pending-${bill.id}`}
                           className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                           title="Cancel Pending Bill"
                         >
@@ -227,9 +293,22 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
                       </>
                     )}
 
+                    {(st === "Paid" || st === "Partially Refunded") && onProcessRefund && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenRefundModal(bill)}
+                        data-testid={`refund-bill-${bill.id}`}
+                        className="px-2.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        title="Process Server Refund"
+                      >
+                        <RotateCcw size={12} /> Refund
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => onSelectBill(bill)}
+                      data-testid={`view-bill-${bill.id}`}
                       className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
                     >
                       <Eye size={14} /> View
@@ -239,6 +318,102 @@ export default function BillingHistory({ orderHistory = [], onSelectBill, onUpda
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Server Refund Confirmation Modal */}
+      {refundTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-5 bg-stone-900 border-stone-800 shadow-2xl rounded-2xl flex flex-col gap-4">
+            <div className="flex justify-between items-start border-b border-stone-800 pb-3">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-stone-50 flex items-center gap-2">
+                  <RotateCcw size={18} className="text-purple-400" /> Process Server Refund
+                </h3>
+                <p className="text-xs text-stone-400">Order #{refundTarget.bill.id} · {refundTarget.bill.customerName || "Walk-in"}</p>
+              </div>
+              <IconButton onClick={() => setRefundTarget(null)} aria-label="Close refund modal">
+                <X size={16} />
+              </IconButton>
+            </div>
+
+            {/* Error Banner */}
+            {refundError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle size={16} className="shrink-0" />
+                <span>{refundError}</span>
+              </div>
+            )}
+
+            {/* Balance Details */}
+            <div className="bg-stone-950 p-3 rounded-xl border border-stone-800 flex flex-col gap-1.5 text-xs">
+              <div className="flex justify-between text-stone-400">
+                <span>Original Bill Total</span>
+                <span className="font-mono text-stone-200">{currency(refundTarget.originalPaid)}</span>
+              </div>
+              {refundTarget.alreadyRefunded > 0 && (
+                <div className="flex justify-between text-rose-400">
+                  <span>Already Refunded</span>
+                  <span className="font-mono">-{currency(refundTarget.alreadyRefunded)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-emerald-400 font-bold border-t border-stone-800 pt-1.5">
+                <span>Maximum Refundable</span>
+                <span className="font-mono">{currency(refundTarget.refundableAmount)}</span>
+              </div>
+            </div>
+
+            {/* Inputs */}
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-stone-300 block mb-1">Refund Amount (₹)</label>
+                <input
+                  type="number"
+                  data-testid="refund-amount-input"
+                  value={refundAmountInput}
+                  onChange={(e) => setRefundAmountInput(e.target.value)}
+                  placeholder={`Max ${refundTarget.refundableAmount}`}
+                  max={refundTarget.refundableAmount}
+                  className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-stone-100 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-stone-300 block mb-1">Reason for Refund</label>
+                <input
+                  type="text"
+                  data-testid="refund-reason-input"
+                  value={refundReasonInput}
+                  onChange={(e) => setRefundReasonInput(e.target.value)}
+                  placeholder="e.g. Customer returned item, Billing error"
+                  className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-stone-800">
+              <button
+                type="button"
+                onClick={() => setRefundTarget(null)}
+                className="py-2.5 rounded-xl border border-stone-700 text-stone-300 text-xs font-bold hover:bg-stone-800 transition"
+              >
+                Cancel
+              </button>
+              <PrimaryButton
+                onClick={handleConfirmRefund}
+                disabled={isRefunding || Number(refundAmountInput) <= 0 || Number(refundAmountInput) > refundTarget.refundableAmount}
+                data-testid="confirm-refund-btn"
+                className="py-2.5 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white"
+              >
+                {isRefunding ? (
+                  <RefreshCw size={14} className="animate-spin mx-auto" />
+                ) : (
+                  `Confirm Refund (${currency(parseFloat(refundAmountInput) || 0)})`
+                )}
+              </PrimaryButton>
+            </div>
+          </Card>
         </div>
       )}
     </div>

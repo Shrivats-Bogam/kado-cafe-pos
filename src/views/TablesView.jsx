@@ -141,6 +141,7 @@ export default function TablesView({
           <TableFilters activeFilter={activeFilter} setActiveFilter={setActiveFilter} counts={counts} />
           <button
             onClick={() => setShowAddModal(true)}
+            data-testid="add-table-btn"
             className="rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 px-4 py-2 text-xs font-bold flex items-center gap-1.5 shrink-0 transition min-h-[44px] cursor-pointer shadow-md"
           >
             <Plus size={16} /> Add Table
@@ -175,6 +176,7 @@ export default function TablesView({
               table={t}
               menuItems={menuItems}
               onOpenTable={onOpenTable}
+              onEditTable={(table) => setEditingTable(table)}
               onOpenMoreMenu={(table) => setSelectedTableForMenu(table)}
             />
           ))}

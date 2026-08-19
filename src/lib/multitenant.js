@@ -6,6 +6,17 @@ export const DEFAULT_ORGANIZATION_NAME = "Kado Cafe Main";
 let currentOrganizationId = DEFAULT_ORGANIZATION_ID;
 
 /**
+ * Tenant Subscription Lifecycle Statuses
+ */
+export const TENANT_SUBSCRIPTION_STATUS = {
+  ACTIVE: "ACTIVE",
+  TRIAL: "TRIAL",
+  GRACE_PERIOD: "GRACE_PERIOD",
+  SUSPENDED: "SUSPENDED",
+  ARCHIVED: "ARCHIVED"
+};
+
+/**
  * Get active tenant organization ID
  * @returns {string} UUID of active organization
  */
@@ -31,15 +42,34 @@ export function setOrganizationId(orgId) {
  */
 export function createOrganizationModel(name, ownerId = null) {
   const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `org-${Date.now()}`;
+  const now = new Date().toISOString();
+  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
   return {
     id,
     name: name || "New Cafe",
     owner_id: ownerId,
-    status: "active",
-    plan: "enterprise",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    status: TENANT_SUBSCRIPTION_STATUS.ACTIVE,
+    subscription_status: TENANT_SUBSCRIPTION_STATUS.TRIAL,
+    plan_id: "plan_pro_monthly",
+    trial_started_at: now,
+    trial_ends_at: trialEnd,
+    subscription_started_at: now,
+    subscription_ends_at: trialEnd,
+    created_at: now,
+    updated_at: now,
   };
+}
+
+/**
+ * Verify if tenant subscription status permits active POS operations
+ * @param {object} tenant 
+ * @returns {boolean} True if operations allowed
+ */
+export function canTenantOperate(tenant) {
+  if (!tenant) return true;
+  const status = tenant.subscription_status || tenant.status || TENANT_SUBSCRIPTION_STATUS.ACTIVE;
+  return status !== TENANT_SUBSCRIPTION_STATUS.SUSPENDED && status !== TENANT_SUBSCRIPTION_STATUS.ARCHIVED;
 }
 
 /**

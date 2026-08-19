@@ -3,8 +3,8 @@
 import { defaultMenu } from "./menu.js";
 
 export const ROLE_TABS = {
-  Owner: ["dashboard", "tables", "kitchen", "parcel", "menu", "customers", "insights", "reports", "employees", "settings"],
-  Manager: ["dashboard", "tables", "kitchen", "parcel", "menu", "customers", "insights", "reports", "employees"],
+  Owner: ["dashboard", "tables", "kitchen", "parcel", "menu", "inventory", "customers", "insights", "reports", "employees", "settings"],
+  Manager: ["dashboard", "tables", "kitchen", "parcel", "menu", "inventory", "customers", "insights", "reports", "employees"],
   Staff: ["dashboard", "tables", "kitchen", "parcel"],
   Kitchen: ["kitchen"],
   Waiter: ["tables", "kitchen", "parcel"],

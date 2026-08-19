@@ -16,17 +16,21 @@ import MenuManageView from "../views/MenuManageView.jsx";
 import CustomersView from "../views/CustomersView.jsx";
 import ReportsView from "../views/ReportsView.jsx";
 import EmployeesView from "../views/EmployeesView.jsx";
+import InventoryView from "../views/InventoryView.jsx";
 import AIInsightsView from "../views/AIInsightsView.jsx";
 import SettingsPanel from "../views/SettingsPanel.jsx";
 import SettingsView from "../views/SettingsView.jsx";
 import TableQRModal from "../views/TableQRModal.jsx";
 
-import { getState, setState, subscribeToChanges, isCloudEnabled } from "../lib/storage.js";
+import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient } from "../lib/storage.js";
 import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
 import { fireStatusToasts } from "../state/kitchenRealtime.js";
-import { initializeAuthSession, logoutUser } from "../lib/auth.js";
+import { initializeAuthSession, loginWithEmail, logoutUser } from "../lib/auth.js";
+import { filterProductionAccounts } from "../lib/env.js";
+import { executeServerPayment, executeServerSplitPayment, executeServerRefund } from "../lib/serverTransactions.js";
+import { makeId } from "../lib/id.js";
 import * as actions from "../state/actions.js";
 
 const TABS = [
@@ -35,6 +39,7 @@ const TABS = [
   { id: "kitchen", label: "Kitchen", icon: ChefHat },
   { id: "parcel", label: "Parcel", icon: Package },
   { id: "menu", label: "Menu", icon: MenuIcon },
+  { id: "inventory", label: "Inventory", icon: Package },
   { id: "customers", label: "Customers", icon: Users },
   { id: "insights", label: "Insights", icon: Sparkles },
   { id: "reports", label: "Reports", icon: BarChart3 },
@@ -50,6 +55,7 @@ export default function StaffApp() {
   const [qrTableId, setQrTableId] = useState(null);
   const [showCalc, setShowCalc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMobileMore, setShowMobileMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [connected, setConnected] = useState(false);
   const skipNextSave = useRef(false);
@@ -61,7 +67,8 @@ export default function StaffApp() {
   useEffect(() => {
     (async () => {
       try {
-        await initializeAuthSession();
+        const supabase = getSupabaseClient();
+        await initializeAuthSession(supabase);
         const json = await getState();
         const next = json ? { ...defaultState(), ...JSON.parse(json) } : defaultState();
 
@@ -146,7 +153,7 @@ export default function StaffApp() {
 
     // Multi-tab storage sync for local mode (sub-10ms response when another tab updates localStorage)
     const handleStorageChange = (e) => {
-      if (e.key === "kado-cafe-state" && e.newValue) {
+      if ((e.key === LS_KEY || e.key === "kado-cafe-state") && e.newValue) {
         refetchAndApply();
       }
     };
@@ -163,16 +170,32 @@ export default function StaffApp() {
     };
   }, [loaded, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---------- Reset tab when role changes scope ----------
+  // ---------- Reset tab & sync current user role when employee record changes ----------
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && state) {
+      // Re-verify currentUser against authoritative state.employees
+      const emp = (state.employees || []).find(e => (e.id && e.id === currentUser.id) || (e.pin && e.pin === currentUser.pin));
+      if (emp && (emp.role !== currentUser.role || emp.name !== currentUser.name || emp.pin !== currentUser.pin)) {
+        if (emp.status === "disabled" || emp.status === "Inactive") {
+          setCurrentUser(null);
+          return;
+        }
+        setCurrentUser({
+          id: emp.id,
+          name: emp.name,
+          role: emp.role,
+          pin: emp.pin,
+          status: emp.status
+        });
+      }
+
       const allowed = ROLE_TABS[currentUser.role] || ROLE_TABS.Owner;
       if (!allowed.includes(tab)) {
         const defaultTab = allowed[0] || "dashboard";
         setTab(defaultTab);
       }
     }
-  }, [currentUser, tab]);
+  }, [currentUser, tab, state]);
 
   // ---------- Loading ----------
   if (!state) {
@@ -182,41 +205,144 @@ export default function StaffApp() {
       </div>
     );
   }
+  // `update` applies a pure action to the current state. Each action lives in
+  // src/state/actions.js so business rules are testable and reusable outside
+  // the React tree. The signatures passed to child views are unchanged.
+  const update = (apply) => setStateRaw((prev) => apply(prev));
+  if (typeof window !== "undefined") {
+    window.__kadoUpdate = update;
+    window.__kadoActions = actions;
+  }
+
+  // Dynamically derive active login user cards from state.employees and state.users
+  const loginUsers = (() => {
+    if (!state) return [];
+    const employees = state.employees || [];
+    const users = state.users || [];
+
+    const empUsers = employees
+      .filter(e => e.status !== "disabled" && e.status !== "Inactive")
+      .map(e => ({
+        id: e.id,
+        name: e.name,
+        role: e.role,
+        pin: e.pin,
+        status: e.status,
+        active: true
+      }));
+
+    const legacyUsers = users.filter(u =>
+      u.active !== false &&
+      u.status !== "disabled" &&
+      u.status !== "Inactive" &&
+      !empUsers.some(e => e.id === u.id || (e.role === u.role && e.pin === u.pin) || (e.name === u.name && e.pin === u.pin))
+    );
+
+    return filterProductionAccounts([...empUsers, ...legacyUsers]);
+  })();
+
+  const handleCloudLogin = async (email, password) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new Error("Cloud authentication service not available on this terminal.");
+    }
+    const session = await loginWithEmail(supabase, email, password);
+    if (!session || !session.user || !session.role) {
+      throw new Error("No active organization membership found for this user account.");
+    }
+    if (session.member && session.member.active === false) {
+      throw new Error("Account is disabled or inactive.");
+    }
+
+    const authenticatedCloudUser = {
+      id: session.user.id,
+      name: session.member?.name || session.user.email?.split("@")[0] || "Cloud User",
+      role: session.role,
+      email: session.user.email,
+      organization_id: session.organization_id,
+      isCloud: true,
+    };
+
+    setCurrentUser(authenticatedCloudUser);
+
+    update((s) => actions.recordActivityLog(s, {
+      employeeName: authenticatedCloudUser.name,
+      action: "Logged into POS via Cloud Auth",
+      module: "Auth"
+    }));
+
+    return authenticatedCloudUser;
+  };
+
   if (!currentUser) {
     return (
       <>
-        <LoginScreen users={state.users || []} onLogin={(u) => {
-          // Check if employee account is disabled
-          const emp = (state.employees || []).find(e => e.pin === u.pin || e.name === u.name);
-          if (emp && emp.status === "disabled") {
+        <LoginScreen users={loginUsers} onLogin={(u) => {
+          // Authoritative employee lookup from state.employees
+          const emp = (state.employees || []).find(e => (e.id && e.id === u.id) || (e.pin && e.pin === u.pin));
+          if (emp && (emp.status === "disabled" || emp.status === "Inactive")) {
             toaster.push("Account Disabled. Please contact the Owner.", "rush");
             return;
           }
 
-          setCurrentUser(u);
+          // Always construct user payload from authoritative state.employees record
+          const authenticatedUser = emp ? {
+            id: emp.id,
+            name: emp.name,
+            role: emp.role,
+            pin: emp.pin,
+            status: emp.status
+          } : u;
+
+          setCurrentUser(authenticatedUser);
           // Record login activity
           update((s) => actions.recordActivityLog(s, {
-            employeeName: u.name,
+            employeeName: authenticatedUser.name,
             action: "Logged into POS",
             module: "Auth"
           }));
-        }} />
+        }} onCloudLogin={handleCloudLogin} />
         <Toaster toaster={toaster} />
       </>
     );
   }
 
-  // ---------- Handlers ----------
-  // `update` applies a pure action to the current state. Each action lives in
-  // src/state/actions.js so business rules are testable and reusable outside
-  // the React tree. The signatures passed to child views are unchanged.
-  const update = (apply) => setStateRaw((prev) => apply(prev));
-
   const saveTableOrder = (tableId, items, customerName, opts = {}) =>
     update((s) => actions.saveTableOrder(s, tableId, items, customerName, opts));
 
-  const generateBillForTable = (tableId, items, customerName, totals, paymentMode, phone, redeemedPoints) =>
-    update((s) => actions.generateBillForTable(s, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints));
+  const generateBillForTable = async (tableId, items, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown = null) => {
+    const supabase = getSupabaseClient();
+    const finalTotal = Math.max(0, totals.grandTotal - (redeemedPoints || 0));
+    const isPending = paymentMode === "Pending";
+    let serverTxResult = null;
+
+    if (!isPending) {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        throw new Error("OFFLINE_PAYMENT_BLOCKED: Financial transactions cannot be settled while offline. Reconnect to proceed.");
+      }
+
+      if (isCloudEnabled && supabase) {
+        const orderId = makeId("o");
+        if (paymentMode === "Split" && Array.isArray(splitBreakdown) && splitBreakdown.length > 0) {
+          serverTxResult = await executeServerSplitPayment({
+            supabaseClient: supabase,
+            orderId,
+            splitPayments: splitBreakdown
+          });
+        } else {
+          serverTxResult = await executeServerPayment({
+            supabaseClient: supabase,
+            orderId,
+            paymentMethod: paymentMode,
+            amount: finalTotal
+          });
+        }
+      }
+    }
+
+    update((s) => actions.generateBillForTable(s, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints, serverTxResult));
+    return serverTxResult;
+  };
 
   const setTableStatus = (tableId, status) =>
     update((s) => actions.setTableStatus(s, tableId, status));
@@ -237,7 +363,34 @@ export default function StaffApp() {
   const setTablePriority = (tableId, priority) =>
     update((s) => actions.setTablePriority(s, tableId, priority));
 
-  const createParcel = (parcel) => update((s) => actions.createParcel(s, parcel));
+  const createParcel = async (parcel) => {
+    update((s) => actions.createParcel(s, parcel));
+  };
+
+  const processRefund = async ({ orderId, refundAmount, reason }) => {
+    const supabase = getSupabaseClient();
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      throw new Error("OFFLINE_REFUND_BLOCKED: Refunds cannot be processed while offline. Reconnect to proceed.");
+    }
+
+    const staffRole = currentUser?.role || "Manager";
+    if (!["Owner", "Manager"].includes(staffRole)) {
+      throw new Error(`UNAUTHORIZED_ROLE: Role '${staffRole}' does not have refund permissions. Only Owner and Manager can process refunds.`);
+    }
+
+    let serverTxResult = null;
+    if (isCloudEnabled && supabase) {
+      serverTxResult = await executeServerRefund({
+        supabaseClient: supabase,
+        orderId,
+        refundAmount,
+        reason
+      });
+    }
+
+    update((s) => actions.refundOrder(s, orderId, refundAmount, reason, staffRole, serverTxResult));
+    return serverTxResult;
+  };
 
   const updateParcelStatus = (id, status) =>
     update((s) => actions.updateParcelStatus(s, id, status));
@@ -262,6 +415,7 @@ export default function StaffApp() {
   const removeUser = (id) => update((s) => actions.removeUser(s, id));
 
   const logout = () => {
+    logoutUser(getSupabaseClient());
     clearSession();
     saveUIState({ tab, openTableId: null, soundEnabled }); // remember UI but close table view
     setOpenTableId(null);
@@ -289,6 +443,7 @@ export default function StaffApp() {
         {visibleTabs.map((t) => (
           <button
             key={t.id}
+            data-testid={`nav-${t.id}`}
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${
               tab === t.id ? "bg-amber-500 text-stone-950 font-medium" : "text-stone-400 hover:bg-stone-900"
@@ -404,6 +559,20 @@ export default function StaffApp() {
               onReorderCategories={reorderCategories}
             />
           )}
+          {tab === "inventory" && (
+            <InventoryView
+              inventory={state.inventory}
+              recipes={state.recipes}
+              inventoryLogs={state.inventoryLogs}
+              menuItems={state.menuItems}
+              onAddInventory={(item) => update(s => actions.addInventoryItem(s, item))}
+              onEditInventory={(id, patch) => update(s => actions.editInventoryItem(s, id, patch))}
+              onDeleteInventory={(id) => update(s => actions.deleteInventoryItem(s, id))}
+              onSaveRecipe={(menuItemId, ingredients) => update(s => actions.saveRecipe(s, menuItemId, ingredients))}
+              onAddPurchase={(purchaseData) => update(s => actions.addPurchaseEntry(s, purchaseData))}
+              onAdjustStock={(adjustmentData) => update(s => actions.adjustStock(s, adjustmentData))}
+            />
+          )}
           {tab === "customers" && (
             <CustomersView
               customers={state.customers}
@@ -443,19 +612,74 @@ export default function StaffApp() {
       </div>
 
       {/* Mobile bottom nav */}
-      <div className="sm:hidden fixed bottom-0 inset-x-0 bg-stone-900 border-t border-stone-800 z-20 flex overflow-x-auto no-scrollbar">
-        {visibleTabs.map((t) => (
+      <div className="sm:hidden fixed bottom-0 inset-x-0 bg-stone-900 border-t border-stone-800 z-20 flex items-center justify-around py-1 px-2">
+        {visibleTabs.slice(0, 3).map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex flex-col items-center gap-0.5 py-2.5 px-4 text-xs shrink-0 ${
-              tab === t.id ? "text-amber-500" : "text-stone-500"
+            data-testid={`mobile-nav-${t.id}`}
+            onClick={() => {
+              setTab(t.id);
+              setShowMobileMore(false);
+            }}
+            className={`flex flex-col items-center gap-0.5 py-1.5 px-3 text-[11px] font-medium transition cursor-pointer ${
+              tab === t.id ? "text-amber-500 font-bold" : "text-stone-400 hover:text-stone-200"
             }`}
           >
             <t.icon size={18} /> {t.label}
           </button>
         ))}
+
+        <button
+          type="button"
+          data-testid="mobile-nav-more"
+          onClick={() => setShowMobileMore(!showMobileMore)}
+          className={`flex flex-col items-center gap-0.5 py-1.5 px-3 text-[11px] font-medium transition cursor-pointer ${
+            showMobileMore || !visibleTabs.slice(0, 3).some((t) => t.id === tab)
+              ? "text-amber-500 font-bold"
+              : "text-stone-400 hover:text-stone-200"
+          }`}
+        >
+          <MenuIcon size={18} /> More
+        </button>
       </div>
+
+      {/* Mobile 'More' Drawer Bottom Sheet */}
+      {showMobileMore && (
+        <div className="sm:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-xs flex flex-col justify-end">
+          <div className="bg-stone-900 border-t border-stone-800 rounded-t-3xl p-4 flex flex-col gap-4 animate-in slide-in-from-bottom duration-200 max-h-[80vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-300">All POS Navigation Modules</span>
+              <button
+                onClick={() => setShowMobileMore(false)}
+                className="text-stone-400 hover:text-stone-200 text-xs font-bold px-3 py-1 bg-stone-800 rounded-lg cursor-pointer"
+              >
+                Close ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {visibleTabs.map((t) => (
+                <button
+                  key={t.id}
+                  data-testid={`mobile-nav-${t.id}`}
+                  onClick={() => {
+                    setTab(t.id);
+                    setShowMobileMore(false);
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-xs gap-1.5 transition cursor-pointer ${
+                    tab === t.id
+                      ? "bg-amber-500 text-stone-950 font-bold border-amber-400 shadow-md"
+                      : "bg-stone-950 text-stone-300 border-stone-800 hover:bg-stone-800"
+                  }`}
+                >
+                  <t.icon size={20} />
+                  <span className="text-[10px] text-center leading-tight truncate w-full">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating calculator */}
       <button

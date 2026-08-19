@@ -192,6 +192,7 @@ export default function InventoryMaster({
 
           <PrimaryButton
             onClick={openAddModal}
+            data-testid="add-inventory-btn"
             className="min-h-[44px] px-4 text-xs font-bold shrink-0 active:scale-95 cursor-pointer"
           >
             <Plus size={16} /> Add Product
@@ -263,6 +264,7 @@ export default function InventoryMaster({
                   <button
                     type="button"
                     onClick={() => openEditModal(item)}
+                    data-testid={`edit-inv-${item.name}`}
                     className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs flex items-center gap-1 transition cursor-pointer"
                   >
                     <Edit2 size={14} /> Edit
@@ -309,6 +311,7 @@ export default function InventoryMaster({
                 <input
                   type="text"
                   required
+                  data-testid="inv-name-input"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. Milk, Coffee Beans, Bun..."
@@ -321,6 +324,7 @@ export default function InventoryMaster({
                   <label className="text-xs text-stone-400 font-semibold block mb-1">Category</label>
                   <input
                     type="text"
+                    data-testid="inv-category-input"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     placeholder="Dairy, Beverages, Bakery..."
@@ -331,6 +335,7 @@ export default function InventoryMaster({
                 <div>
                   <label className="text-xs text-stone-400 font-semibold block mb-1">Unit</label>
                   <select
+                    data-testid="inv-unit-select"
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -346,6 +351,7 @@ export default function InventoryMaster({
                   <input
                     type="number"
                     step="any"
+                    data-testid="inv-stock-input"
                     value={formData.currentStock}
                     onChange={(e) => setFormData({ ...formData, currentStock: e.target.value })}
                     placeholder="0"
@@ -357,6 +363,7 @@ export default function InventoryMaster({
                   <input
                     type="number"
                     step="any"
+                    data-testid="inv-minstock-input"
                     value={formData.minStock}
                     onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
                     placeholder="0"
@@ -368,6 +375,7 @@ export default function InventoryMaster({
                   <input
                     type="number"
                     step="any"
+                    data-testid="inv-costprice-input"
                     value={formData.costPrice}
                     onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
                     placeholder="0"
@@ -380,6 +388,7 @@ export default function InventoryMaster({
                 <label className="text-xs text-stone-400 font-semibold block mb-1">Supplier</label>
                 <input
                   type="text"
+                  data-testid="inv-supplier-input"
                   value={formData.supplier}
                   onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
                   placeholder="Supplier / Vendor name"
@@ -406,7 +415,7 @@ export default function InventoryMaster({
                 >
                   Cancel
                 </button>
-                <PrimaryButton type="submit" className="flex-1 min-h-[44px] text-xs font-bold cursor-pointer">
+                <PrimaryButton type="submit" data-testid="inv-submit-btn" className="flex-1 min-h-[44px] text-xs font-bold cursor-pointer">
                   {editingItem ? "Save Changes" : "Create Product"}
                 </PrimaryButton>
               </div>

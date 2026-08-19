@@ -40,7 +40,7 @@ export function Pill({ children, tone = "stone" }) {
   );
 }
 
-export function IconButton({ onClick, children, className = "", title, ariaLabel }) {
+export function IconButton({ onClick, children, className = "", title, ariaLabel, ...rest }) {
   return (
     <button
       type="button"
@@ -48,17 +48,22 @@ export function IconButton({ onClick, children, className = "", title, ariaLabel
       title={title || ariaLabel}
       aria-label={ariaLabel || title}
       className={`min-h-[44px] min-w-[44px] rounded-xl p-2.5 bg-stone-800 hover:bg-stone-700 active:scale-95 transition flex items-center justify-center text-stone-300 hover:text-stone-100 ${className}`}
+      {...rest}
     >
       {children}
     </button>
   );
 }
 
-export function PrimaryButton({ onClick, children, className = "", disabled, type = "button", ariaLabel }) {
+export function PrimaryButton({ onClick, children, className = "", disabled, type = "button", ariaLabel, ...rest }) {
   const [isClicked, setIsClicked] = useState(false);
 
   const handleClick = (e) => {
-    if (isClicked) return;
+    if (isClicked) {
+      if (type !== "submit") e.preventDefault();
+      return;
+    }
+    
     setIsClicked(true);
     setTimeout(() => setIsClicked(false), 500); // 500ms debounce protection
     if (onClick) onClick(e);
@@ -68,16 +73,17 @@ export function PrimaryButton({ onClick, children, className = "", disabled, typ
     <button
       type={type}
       onClick={handleClick}
-      disabled={disabled || isClicked}
+      disabled={disabled} // Removed `|| isClicked` to prevent canceling native form submissions
       aria-label={ariaLabel}
-      className={`min-h-[44px] rounded-xl px-4 py-2.5 font-bold text-xs bg-amber-500 text-stone-950 hover:bg-amber-400 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 shadow-md ${className}`}
+      className={`min-h-[44px] rounded-xl px-4 py-2.5 font-bold text-xs bg-amber-500 text-stone-950 hover:bg-amber-400 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 shadow-md ${isClicked ? "opacity-70 pointer-events-none" : ""} ${className}`}
+      {...rest}
     >
       {children}
     </button>
   );
 }
 
-export function SecondaryButton({ onClick, children, className = "", disabled, type = "button", ariaLabel }) {
+export function SecondaryButton({ onClick, children, className = "", disabled, type = "button", ariaLabel, ...rest }) {
   return (
     <button
       type={type}
@@ -85,6 +91,7 @@ export function SecondaryButton({ onClick, children, className = "", disabled, t
       disabled={disabled}
       aria-label={ariaLabel}
       className={`min-h-[44px] rounded-xl px-4 py-2.5 font-bold text-xs bg-stone-800 text-stone-200 hover:bg-stone-700 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 border border-stone-700 ${className}`}
+      {...rest}
     >
       {children}
     </button>

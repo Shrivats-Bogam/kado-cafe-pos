@@ -27,46 +27,57 @@ export function computeChecksum(str) {
  * Extract business-critical whitelisted entities from application state.
  * Strips raw secrets, temporary browser states, and transient UI flags.
  */
+import { CAFE_ID } from "./storage.js";
+
 export function buildBackupPayload(state = {}) {
   const {
     settings = {},
     tables = [],
     menuItems = [],
+    categories = [],
     parcels = [],
+    orders = [],
+    pendingBills = [],
+    payments = [],
+    refunds = [],
     orderHistory = [],
     customers = [],
+    customerFeedback = [],
+    assistanceRequests = [],
     employees = [],
     users = [],
     rolePermissions = {},
     shifts = [],
     activityLogs = [],
     expenses = [],
-    customerFeedback = [],
     inventory = [],
     recipes = {},
     inventoryLogs = []
   } = state;
 
-  // Redact secrets from settings export if any exist
   const safeSettings = { ...settings };
-
-  // Redact PINs or export employee roster securely
   const safeEmployees = (employees || []).map(({ ...emp }) => emp);
 
   const dataPayload = {
     settings: safeSettings,
     tables,
     menuItems,
+    categories,
     parcels,
+    orders,
+    pendingBills,
+    payments,
+    refunds,
     orderHistory,
     customers,
+    customerFeedback,
+    assistanceRequests,
     employees: safeEmployees,
     users,
     rolePermissions,
     shifts,
     activityLogs,
     expenses,
-    customerFeedback,
     inventory,
     recipes,
     inventoryLogs
@@ -80,6 +91,9 @@ export function buildBackupPayload(state = {}) {
     backupVersion: BACKUP_VERSION,
     schemaVersion: SCHEMA_VERSION,
     applicationVersion: APP_VERSION,
+    cafe_id: CAFE_ID,
+    state_version: state.state_version || 1,
+    updated_at: state.updated_at || new Date().toISOString(),
     backupId: "bkp_" + Date.now(),
     createdAt: new Date().toISOString(),
     checksum,
@@ -87,11 +101,13 @@ export function buildBackupPayload(state = {}) {
   };
 }
 
+import { IS_E2E } from "./env.js";
+
 /**
  * Validate a backup object prior to restoration.
  * Returns { valid: boolean, errors: Array<string>, summary: Object|null }
  */
-export function validateBackupPayload(backupObj) {
+export function validateBackupPayload(backupObj, targetCafeId = CAFE_ID) {
   const errors = [];
 
   if (!backupObj || typeof backupObj !== "object") {
@@ -102,14 +118,30 @@ export function validateBackupPayload(backupObj) {
     errors.push("Invalid backup marker. File is not a recognized Kado Cafe backup.");
   }
 
+  if (backupObj.schemaVersion && backupObj.schemaVersion > SCHEMA_VERSION) {
+    errors.push("Incompatible backup schema version.");
+  }
+
+  // Cross-environment / Cross-cafe Safety Check
+  const effectiveTargetCafeId = targetCafeId || CAFE_ID;
+  if (backupObj.cafe_id && effectiveTargetCafeId && backupObj.cafe_id !== effectiveTargetCafeId) {
+    errors.push(`Backup cafe_id "${backupObj.cafe_id}" does not match target environment cafe_id "${effectiveTargetCafeId}". Restoration rejected for safety.`);
+  }
+  if (IS_E2E && backupObj.cafe_id === "kado-cafe") {
+    errors.push("Production backup cannot be restored into an E2E test environment.");
+  }
+
   if (!backupObj.data || typeof backupObj.data !== "object") {
     errors.push("Backup file is missing core data payload.");
   } else {
     const d = backupObj.data;
-    if (!Array.isArray(d.orderHistory)) errors.push("Backup data is missing orderHistory array.");
-    if (!Array.isArray(d.customers)) errors.push("Backup data is missing customers array.");
-    if (!Array.isArray(d.menuItems)) errors.push("Backup data is missing menuItems array.");
-    if (!Array.isArray(d.inventory)) errors.push("Backup data is missing inventory array.");
+    if (!Array.isArray(d.orderHistory)) errors.push("Backup data is missing or corrupted orderHistory array.");
+    if (!Array.isArray(d.customers)) errors.push("Backup data is missing or corrupted customers array.");
+    if (!Array.isArray(d.menuItems)) errors.push("Backup data is missing or corrupted menuItems array.");
+    if (!Array.isArray(d.inventory)) errors.push("Backup data is missing or corrupted inventory array.");
+    if (!Array.isArray(d.employees)) errors.push("Backup data is missing or corrupted employees array.");
+    if (!Array.isArray(d.tables)) errors.push("Backup data is missing or corrupted tables array.");
+    if (d.recipes && typeof d.recipes !== "object") errors.push("Backup data contains corrupted recipes object.");
 
     // Integrity Checksum Validation
     if (backupObj.checksum) {
@@ -138,7 +170,8 @@ export function validateBackupPayload(backupObj) {
     recipesCount: Object.keys(d.recipes || {}).length,
     employeesCount: (d.employees || []).length,
     createdAt: backupObj.createdAt,
-    backupId: backupObj.backupId
+    backupId: backupObj.backupId,
+    cafe_id: backupObj.cafe_id || CAFE_ID
   };
 
   return { valid: true, errors: [], summary };

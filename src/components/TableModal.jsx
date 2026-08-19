@@ -42,7 +42,8 @@ export default function TableModal({ table, existingTables = [], nextTableNumber
     }
   }, [table]);
 
-  const handleNextStep = () => {
+  const handleNextStep = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     setError("");
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -52,7 +53,7 @@ export default function TableModal({ table, existingTables = [], nextTableNumber
 
     // Check duplicate table names/numbers for new tables or renamed tables
     const isDuplicateName = existingTables.some(
-      (t) => t.id !== table?.id && t.name.toLowerCase() === trimmedName.toLowerCase()
+      (t) => t.id !== table?.id && (t.name || `Table ${t.number}`).toLowerCase() === trimmedName.toLowerCase()
     );
 
     if (isDuplicateName) {
@@ -153,6 +154,7 @@ export default function TableModal({ table, existingTables = [], nextTableNumber
                 </label>
                 <input
                   type="text"
+                  data-testid="table-name-input"
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
@@ -172,6 +174,7 @@ export default function TableModal({ table, existingTables = [], nextTableNumber
                 <input
                   type="number"
                   min="1"
+                  data-testid="table-number-input"
                   value={number}
                   onChange={(e) => setNumber(e.target.value)}
                   placeholder="e.g. 1"
@@ -297,6 +300,7 @@ export default function TableModal({ table, existingTables = [], nextTableNumber
             {step === 1 ? (
               <PrimaryButton
                 type="button"
+                data-testid="table-next-btn"
                 onClick={handleNextStep}
                 className="px-5 py-2.5 text-xs flex items-center gap-1.5 min-h-[44px]"
               >
@@ -305,6 +309,7 @@ export default function TableModal({ table, existingTables = [], nextTableNumber
             ) : (
               <PrimaryButton
                 type="submit"
+                data-testid="table-save-btn"
                 className="px-5 py-2.5 text-xs min-h-[44px]"
               >
                 {isEdit ? "Save Table Changes" : "Create Dining Table"}

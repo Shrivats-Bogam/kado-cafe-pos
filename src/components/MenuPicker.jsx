@@ -17,6 +17,7 @@ const MenuItemCard = memo(function MenuItemCard({ item, qty, onAdd, onRemove }) 
       {qty === 0 ? (
         <button
           type="button"
+          data-testid={`menu-picker-add-${item.name}`}
           onClick={() => onAdd(item.id)}
           className="rounded-lg bg-stone-700 hover:bg-amber-500 hover:text-stone-950 text-stone-200 text-xs font-bold py-1.5 flex items-center justify-center gap-1 transition cursor-pointer min-h-[36px]"
         >

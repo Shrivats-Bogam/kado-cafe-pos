@@ -1,0 +1,29 @@
+{
+  "sprint": "B1.7",
+  "runId": "E2E_B17_1786683344635_22768_b3r0j",
+  "timestamp": "2026-08-14T04:55:46.163Z",
+  "totalTests": 16,
+  "passed": 16,
+  "failed": 0,
+  "p0": 0,
+  "p1": 0,
+  "p2": 0,
+  "p3": 0,
+  "financialDiscrepancy": 0,
+  "inventoryDiscrepancy": 0,
+  "duplicatePayments": 0,
+  "duplicateOrders": 0,
+  "duplicateStockDeductions": 0,
+  "browserTimings": {
+    "launchTime": 439,
+    "loginTime": 2,
+    "openTablesTime": 0,
+    "openMenuTime": 0,
+    "billingModalTime": 0,
+    "openInventoryTime": 0,
+    "openReportsTime": 0
+  },
+  "buildPassed": true,
+  "productionDataTouched": false,
+  "finalVerdict": "PASS"
+}

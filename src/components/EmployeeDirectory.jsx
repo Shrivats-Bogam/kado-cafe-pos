@@ -53,7 +53,7 @@ export function EmployeeDirectory({ employees, onAdd, onEdit, onToggleStatus, is
         </div>
 
         {isOwner && (
-          <PrimaryButton onClick={onAdd} className="shrink-0 w-full sm:w-auto">
+          <PrimaryButton onClick={onAdd} data-testid="add-employee-btn" className="shrink-0 w-full sm:w-auto">
             <UserPlus size={16} />
             <span>Add Employee</span>
           </PrimaryButton>
@@ -116,6 +116,7 @@ export function EmployeeDirectory({ employees, onAdd, onEdit, onToggleStatus, is
                         <button
                           type="button"
                           onClick={() => onEdit(emp)}
+                          data-testid={`edit-emp-${emp.id}`}
                           className="p-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-stone-100"
                           title="Edit Employee"
                         >

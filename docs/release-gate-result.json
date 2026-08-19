@@ -1,0 +1,162 @@
+{
+  "releaseVersion": "1.0.0",
+  "environment": "kado-cafe-e2e",
+  "timestamp": "2026-08-14T04:28:01.757Z",
+  "totalGates": 25,
+  "passed": 25,
+  "failed": 0,
+  "blockedGates": [],
+  "finalVerdict": "PASS",
+  "gates": [
+    {
+      "id": "GATE-01",
+      "name": "Secret scanning",
+      "status": "PASS",
+      "evidence": "Zero service_role keys exposed (0 violations)"
+    },
+    {
+      "id": "GATE-02",
+      "name": "Environment safety guard",
+      "status": "PASS",
+      "evidence": "Active CAFE_ID: kado-cafe-e2e"
+    },
+    {
+      "id": "GATE-03",
+      "name": "Deployment health check",
+      "status": "PASS",
+      "evidence": "Health Status: HEALTHY"
+    },
+    {
+      "id": "GATE-04",
+      "name": "Authentication & RBAC integrity",
+      "status": "PASS",
+      "evidence": "Auth module state valid"
+    },
+    {
+      "id": "GATE-05",
+      "name": "Server-authoritative payment RPC",
+      "status": "PASS",
+      "evidence": "RPC status: PAID"
+    },
+    {
+      "id": "GATE-06",
+      "name": "Server-authoritative refund RPC",
+      "status": "PASS",
+      "evidence": "Refund status: REFUNDED"
+    },
+    {
+      "id": "GATE-07",
+      "name": "Duplicate payment protection",
+      "status": "PASS",
+      "evidence": "0 duplicate payments created under replayed key"
+    },
+    {
+      "id": "GATE-08",
+      "name": "Financial reconciliation (₹0 discrepancy)",
+      "status": "PASS",
+      "evidence": "Gross ₹2500 - Refunds ₹100 = Net ₹2400"
+    },
+    {
+      "id": "GATE-09",
+      "name": "Inventory reconciliation (0 kg discrepancy)",
+      "status": "PASS",
+      "evidence": "Opening 150 + Change (-30) = 120kg"
+    },
+    {
+      "id": "GATE-10",
+      "name": "Multi-tenant data isolation",
+      "status": "PASS",
+      "evidence": "Org A and Org B strictly isolated"
+    },
+    {
+      "id": "GATE-11",
+      "name": "Cross-tenant mutation rejection",
+      "status": "PASS",
+      "evidence": "Cross-tenant mutation attempt rejected via organization_id isolation"
+    },
+    {
+      "id": "GATE-12",
+      "name": "Realtime channel isolation guard",
+      "status": "PASS",
+      "evidence": "Realtime channel enforces tenant filter"
+    },
+    {
+      "id": "GATE-13",
+      "name": "Data quality anomaly scanner",
+      "status": "PASS",
+      "evidence": "Zero data anomalies detected"
+    },
+    {
+      "id": "GATE-14",
+      "name": "Structured error logging",
+      "status": "PASS",
+      "evidence": "Structured error logging active"
+    },
+    {
+      "id": "GATE-15",
+      "name": "Global React error boundary recovery",
+      "status": "PASS",
+      "evidence": "React ErrorBoundary active"
+    },
+    {
+      "id": "GATE-16",
+      "name": "Menu view operational state",
+      "status": "PASS",
+      "evidence": "Menu state valid"
+    },
+    {
+      "id": "GATE-17",
+      "name": "Inventory view operational state",
+      "status": "PASS",
+      "evidence": "Inventory state valid"
+    },
+    {
+      "id": "GATE-18",
+      "name": "Tables view operational state",
+      "status": "PASS",
+      "evidence": "Tables state valid"
+    },
+    {
+      "id": "GATE-19",
+      "name": "Reports view operational state",
+      "status": "PASS",
+      "evidence": "Reports state valid"
+    },
+    {
+      "id": "GATE-20",
+      "name": "Pre-release backup generation",
+      "status": "PASS",
+      "evidence": "Pre-release backup created"
+    },
+    {
+      "id": "GATE-21",
+      "name": "Pre-release backup validation",
+      "status": "PASS",
+      "evidence": "Backup snapshot validated"
+    },
+    {
+      "id": "GATE-22",
+      "name": "Rollback procedure verification",
+      "status": "PASS",
+      "evidence": "Rollback drill verified"
+    },
+    {
+      "id": "GATE-23",
+      "name": "Asset hashing & cache safety",
+      "status": "PASS",
+      "evidence": "Asset hashes generated in dist/"
+    },
+    {
+      "id": "GATE-24",
+      "name": "High-load latency threshold",
+      "status": "PASS",
+      "evidence": "High-load queries within latency limits"
+    },
+    {
+      "id": "GATE-25",
+      "name": "Disaster recovery drill (RTO & RPO)",
+      "status": "PASS",
+      "evidence": "DR drill executed cleanly"
+    }
+  ]
+}

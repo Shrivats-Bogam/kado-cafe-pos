@@ -16,8 +16,9 @@ export function EmployeeModal({ employee, onSave, onClose }) {
     pin: employee?.pin || "",
   });
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
       setError("Name is required.");
@@ -29,10 +30,14 @@ export function EmployeeModal({ employee, onSave, onClose }) {
     }
 
     try {
-      onSave(formData);
+      setSaving(true);
+      setError("");
+      await onSave(formData);
       onClose();
     } catch (err) {
       setError(err.message || "Failed to save employee.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -49,6 +54,7 @@ export function EmployeeModal({ employee, onSave, onClose }) {
         <div>
           <label className="text-xs font-semibold text-stone-400 mb-1 block">Full Name</label>
           <TextInput
+            data-testid="emp-name-input"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g. John Doe"
@@ -60,6 +66,7 @@ export function EmployeeModal({ employee, onSave, onClose }) {
           <div>
             <label className="text-xs font-semibold text-stone-400 mb-1 block">Phone Number</label>
             <TextInput
+              data-testid="emp-phone-input"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               placeholder="10-digit phone"
@@ -68,6 +75,7 @@ export function EmployeeModal({ employee, onSave, onClose }) {
           <div>
             <label className="text-xs font-semibold text-stone-400 mb-1 block">4-Digit PIN</label>
             <TextInput
+              data-testid="emp-pin-input"
               type="password"
               maxLength={6}
               value={formData.pin}
@@ -79,19 +87,24 @@ export function EmployeeModal({ employee, onSave, onClose }) {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-stone-400 mb-1 block">Email (Optional)</label>
+          <label className="text-xs font-semibold text-stone-400 mb-1 block">Email (Optional for Cloud Login)</label>
           <TextInput
+            data-testid="emp-email-input"
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             placeholder="john@kadocafe.com"
           />
+          <p className="text-[10px] text-stone-500 mt-1">
+            If provided, an invitation will be sent so the employee can set their own Cloud Login password.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-semibold text-stone-400 mb-1 block">Role</label>
             <select
+              data-testid="emp-role-select"
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               className="w-full min-h-[44px] rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -104,6 +117,7 @@ export function EmployeeModal({ employee, onSave, onClose }) {
           <div>
             <label className="text-xs font-semibold text-stone-400 mb-1 block">Department</label>
             <select
+              data-testid="emp-dept-select"
               value={formData.department}
               onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               className="w-full min-h-[44px] rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -119,12 +133,13 @@ export function EmployeeModal({ employee, onSave, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] px-4 py-2 rounded-xl border border-stone-700 bg-stone-800 text-stone-300 text-xs font-semibold hover:bg-stone-700"
+            disabled={saving}
+            className="min-h-[44px] px-4 py-2 rounded-xl border border-stone-700 bg-stone-800 text-stone-300 text-xs font-semibold hover:bg-stone-700 disabled:opacity-50"
           >
             Cancel
           </button>
-          <PrimaryButton type="submit">
-            {employee ? "Update Employee" : "Save Employee"}
+          <PrimaryButton type="submit" data-testid="emp-submit-btn" disabled={saving}>
+            {saving ? "Saving..." : employee ? "Update Employee" : "Save Employee"}
           </PrimaryButton>
         </div>
       </form>

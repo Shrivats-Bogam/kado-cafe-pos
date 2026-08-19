@@ -55,14 +55,39 @@ export function saveAISettings(settings) {
 
 export function getEffectiveAPIKey(providerId) {
   const settings = getAISettings();
-  if (settings.provider === providerId && settings.apiKey) {
+  const targetProvider = providerId || settings.provider || "gemini";
+
+  if (settings.apiKey && (settings.provider === targetProvider || !providerId)) {
     return settings.apiKey;
   }
 
   // Fallback to environment variables
-  if (providerId === "gemini") return import.meta.env.VITE_GEMINI_API_KEY || "";
-  if (providerId === "openai") return import.meta.env.VITE_OPENAI_API_KEY || "";
-  if (providerId === "anthropic") return import.meta.env.VITE_ANTHROPIC_API_KEY || "";
+  if (targetProvider === "gemini") {
+    return (
+      import.meta.env.VITE_GEMINI_API_KEY ||
+      import.meta.env.VITE_AI_API_KEY ||
+      import.meta.env.GEMINI_API_KEY ||
+      ""
+    );
+  }
+  if (targetProvider === "openai") {
+    return (
+      import.meta.env.VITE_OPENAI_API_KEY ||
+      import.meta.env.VITE_AI_API_KEY ||
+      ""
+    );
+  }
+  if (targetProvider === "anthropic") {
+    return (
+      import.meta.env.VITE_ANTHROPIC_API_KEY ||
+      import.meta.env.VITE_AI_API_KEY ||
+      ""
+    );
+  }
 
-  return "";
+  return (
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    import.meta.env.VITE_AI_API_KEY ||
+    ""
+  );
 }

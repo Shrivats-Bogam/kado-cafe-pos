@@ -12,3 +12,6 @@ dist
 
 # Local Netlify folder
 .netlify
+scratch/
+supabase/.temp/
+implementation_plan.md

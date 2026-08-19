@@ -166,6 +166,7 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
 
           <PrimaryButton
             onClick={handleSave}
+            data-testid="settings-save-btn"
             disabled={saveStatus === "saving" || !isOwner}
             className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs min-h-[44px] px-5 cursor-pointer shadow-md shadow-amber-500/20"
           >
@@ -179,7 +180,7 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
               </>
             ) : (
               <>
-                <Save size={15} /> Save Configuration
+                <Save size={15} /> Save Changes
               </>
             )}
           </PrimaryButton>
@@ -187,17 +188,14 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
       </div>
 
       {/* Main Settings Section Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Navigation Sidebar */}
-        <Card className="lg:col-span-4 p-3 bg-stone-900 border-stone-800 flex flex-col gap-1 shadow-md">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 px-3 py-1">
-            Configuration Sections
-          </span>
+        <Card className="lg:col-span-4 p-3 bg-stone-900 border-stone-800 flex flex-col gap-1.5 shadow-md">
           {SECTIONS.map((sec) => (
             <button
               key={sec.id}
-              type="button"
               onClick={() => setActiveSection(sec.id)}
+              data-testid={`settings-nav-${sec.id}`}
               className={`flex items-center justify-between p-3 rounded-xl text-xs font-bold transition cursor-pointer text-left ${
                 activeSection === sec.id
                   ? sec.danger
@@ -769,6 +767,7 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
 
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-stone-800/60">
                   <PrimaryButton
+                    data-testid="export-backup-btn"
                     disabled={!isOwner}
                     onClick={() => {
                       const payload = buildBackupPayload(state);
@@ -786,6 +785,7 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
                   </PrimaryButton>
 
                   <SecondaryButton
+                    data-testid="restore-backup-btn"
                     disabled={!isOwner}
                     onClick={() => setShowRestoreModal(true)}
                   >

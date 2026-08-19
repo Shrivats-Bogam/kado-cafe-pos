@@ -1,0 +1,50 @@
+name: Kado Cafe POS — CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  ci-build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Secret Exposure Scanning
+        run: node src/lib/secretScanner.js
+
+      - name: Environment Safety Guard Check
+        run: node tests/e2e/e2eGuard.js
+
+      - name: Multi-Tenant Security Tests
+        env:
+          VITE_APP_ENV: e2e
+          VITE_CAFE_ID: kado-cafe-e2e
+        run: node tests/e2e/b11MultiTenantSecurity.js
+
+      - name: Transaction Security Tests
+        env:
+          VITE_APP_ENV: e2e
+          VITE_CAFE_ID: kado-cafe-e2e
+        run: node tests/e2e/b10TransactionSecurity.js
+
+      - name: Observability Audit Tests
+        env:
+          VITE_APP_ENV: e2e
+          VITE_CAFE_ID: kado-cafe-e2e
+        run: node tests/e2e/b12ObservabilityAudit.js
+
+      - name: Production Build Gate
+        run: npm run build

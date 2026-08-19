@@ -70,6 +70,7 @@ export default function InventoryView({
 
           <button
             onClick={() => setShowStockModal(true)}
+            data-testid="purchase-adjust-modal-btn"
             className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition shrink-0"
           >
             <PlusCircle size={16} /> Purchase / Adjust

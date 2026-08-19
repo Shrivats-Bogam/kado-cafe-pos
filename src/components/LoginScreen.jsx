@@ -13,7 +13,8 @@ export default function LoginScreen({ users, onLogin, onCloudLogin }) {
   const [submittingCloud, setSubmittingCloud] = useState(false);
 
   const submitPin = (fullPin) => {
-    if (pickedUser && String(fullPin) === String(pickedUser.pin)) {
+    const expectedPin = String(pickedUser?.pin || "");
+    if (pickedUser && String(fullPin) === expectedPin) {
       onLogin(pickedUser);
     } else {
       setError("Wrong PIN");
@@ -40,8 +41,7 @@ export default function LoginScreen({ users, onLogin, onCloudLogin }) {
       if (onCloudLogin) {
         await onCloudLogin(email, password);
       } else {
-        // Fallback simulated cloud login for local dev
-        onLogin({ id: "user-cloud", name: email.split("@")[0], role: "Owner", pin: "0000" });
+        setError("Cloud login is currently unavailable. Please use Terminal PIN.");
       }
     } catch (err) {
       setError(err.message || "Failed to sign in");
@@ -106,13 +106,14 @@ export default function LoginScreen({ users, onLogin, onCloudLogin }) {
           <p className="text-xs text-rose-400">No team members found — ask an Owner to add one from Settings.</p>
         )}
         <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
-          {(users || []).map((u) => (
+          {(users || []).filter((u) => u.active !== false && u.status !== "disabled" && u.status !== "Inactive").map((u) => (
             <button
               key={u.id}
+              data-testid={`login-user-${u.role}`}
               onClick={() => setPickedUser(u)}
               className="rounded-2xl bg-stone-900 border border-stone-800 p-5 flex flex-col items-center gap-2 hover:border-amber-500 transition"
             >
-              <div className="w-12 h-12 rounded-full bg-amber-500 text-stone-950 flex items-center justify-center font-serif text-lg">
+              <div data-testid={`user-card-${u.role.toLowerCase()}`} className="w-12 h-12 rounded-full bg-amber-500 text-stone-950 flex items-center justify-center font-serif text-lg">
                 {u.name.charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-medium text-stone-100">{u.name}</span>
@@ -155,6 +156,7 @@ export default function LoginScreen({ users, onLogin, onCloudLogin }) {
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
           <button
             key={d}
+            data-testid={`pin-digit-${d}`}
             onClick={() => pressDigit(d)}
             className="rounded-xl py-4 text-lg font-medium bg-stone-900 border border-stone-800 text-stone-100 active:bg-stone-800"
           >
@@ -164,12 +166,14 @@ export default function LoginScreen({ users, onLogin, onCloudLogin }) {
         <div />
         <button
           onClick={() => pressDigit("0")}
+          data-testid="pin-digit-0"
           className="rounded-xl py-4 text-lg font-medium bg-stone-900 border border-stone-800 text-stone-100 active:bg-stone-800"
         >
           0
         </button>
         <button
           onClick={() => setPin((p) => p.slice(0, -1))}
+          data-testid="pin-clear"
           className="rounded-xl py-4 flex items-center justify-center bg-stone-900 border border-stone-800 text-stone-300"
         >
           <Delete size={18} />

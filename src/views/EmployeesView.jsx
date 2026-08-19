@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Users, Shield, Clock, Activity } from "lucide-react";
 import { useToaster } from "../components/Toaster.jsx";
+import { getSupabaseClient, isCloudEnabled } from "../lib/storage.js";
+import { manageEmployeeCloud } from "../lib/auth.js";
 
 import { EmployeeDashboard } from "../components/EmployeeDashboard.jsx";
 import { EmployeeDirectory } from "../components/EmployeeDirectory.jsx";
@@ -25,23 +27,77 @@ export default function EmployeesView({ state, dispatch, currentUser }) {
   const { employees = [], rolePermissions = {}, shifts = [], activityLogs = [] } = state;
   const isOwner = currentUser?.role === "Owner";
 
-  const handleSaveEmployee = (empData) => {
+  const handleSaveEmployee = async (empData) => {
     try {
+      const supabase = getSupabaseClient();
+      let cloudResult = null;
+
+      // When Owner is logged in and cloud is active, invoke Edge Function
+      if (isOwner && isCloudEnabled && supabase) {
+        try {
+          cloudResult = await manageEmployeeCloud(supabase, {
+            action: empData.id ? "update" : "provision",
+            member_id: empData.member_id || empData.id,
+            name: empData.name,
+            email: empData.email,
+            role: empData.role,
+            department: empData.department,
+            pin: empData.pin,
+          });
+        } catch (cloudErr) {
+          console.warn("[kado-cafe] Cloud employee sync warning:", cloudErr.message);
+          // Surface error directly if provisioning fails (e.g. duplicate PIN or email)
+          if (cloudErr.message.includes("PIN is already assigned") || cloudErr.message.includes("email") || cloudErr.message.includes("Forbidden")) {
+            throw cloudErr;
+          }
+        }
+      }
+
       if (empData.id) {
-        dispatch("editEmployee", empData);
+        dispatch("editEmployee", {
+          ...empData,
+          ...(cloudResult?.user_id ? { user_id: cloudResult.user_id } : {})
+        });
         toaster.push("Employee updated successfully.", "success");
       } else {
-        dispatch("addEmployee", empData);
-        toaster.push("Employee added successfully.", "success");
+        dispatch("addEmployee", {
+          ...empData,
+          ...(cloudResult?.user_id ? { user_id: cloudResult.user_id } : {}),
+          ...(cloudResult?.member_id ? { member_id: cloudResult.member_id } : {})
+        });
+        if (empData.email && cloudResult?.invite_sent) {
+          toaster.push(`Employee added. Invitation sent to ${empData.email}`, "success");
+        } else {
+          toaster.push("Employee added successfully.", "success");
+        }
       }
     } catch (err) {
       toaster.push(err.message || "Failed to save employee.", "warn");
+      throw err;
     }
   };
 
-  const handleToggleStatus = (empId) => {
-    dispatch("toggleEmployeeStatus", empId);
-    toaster.push("Employee status updated.", "info");
+  const handleToggleStatus = async (empId) => {
+    try {
+      const supabase = getSupabaseClient();
+      const targetEmp = employees.find(e => e.id === empId);
+
+      if (isOwner && isCloudEnabled && supabase && targetEmp) {
+        try {
+          await manageEmployeeCloud(supabase, {
+            action: "toggle-status",
+            member_id: targetEmp.member_id || targetEmp.id,
+          });
+        } catch (cloudErr) {
+          console.warn("[kado-cafe] Cloud status sync notice:", cloudErr.message);
+        }
+      }
+
+      dispatch("toggleEmployeeStatus", empId);
+      toaster.push("Employee status updated.", "info");
+    } catch (err) {
+      toaster.push(err.message || "Failed to update employee status.", "warn");
+    }
   };
 
   const handleSavePermissions = (role, perms) => {

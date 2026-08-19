@@ -1,0 +1,42 @@
+name: Kado Cafe POS — Release Candidate Gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release-candidate-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Secret Exposure Scanning
+        run: node src/lib/secretScanner.js
+
+      - name: Full Release Candidate Verification (25 Gates)
+        env:
+          VITE_APP_ENV: e2e
+          VITE_CAFE_ID: kado-cafe-e2e
+        run: node tests/e2e/b15ReleaseCandidate.js
+
+      - name: Production Build Gate
+        run: npm run build
+
+      - name: Save Release Gate Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-results
+          path: docs/release-gate-result.json

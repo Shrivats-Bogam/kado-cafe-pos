@@ -4,7 +4,7 @@ import { IconButton, PrimaryButton } from "../components/ui.jsx";
 import MenuPicker from "../components/MenuPicker.jsx";
 import CartSummary from "../components/CartSummary.jsx";
 import BillModal from "../components/BillModal.jsx";
-import { orderTotal } from "../lib/currency.js";
+import { currency, orderTotal } from "../lib/currency.js";
 
 // Full-screen takeover on a table: pick items, manage cart, add notes, generate bill.
 export default function TableOrderScreen({ table, menuItems, customers, onClose, onSave, onGenerateBill }) {
@@ -14,6 +14,7 @@ export default function TableOrderScreen({ table, menuItems, customers, onClose,
   const [discountPct, setDiscountPct] = useState(0);
   const [gstOn, setGstOn] = useState(false);
   const [showBill, setShowBill] = useState(false);
+  const [showMobileCartDrawer, setShowMobileCartDrawer] = useState(false);
   const [priority, setPriority] = useState(table.priority || "Normal");
   const [editingItemNoteIndex, setEditingItemNoteIndex] = useState(null);
   const [tempItemNote, setTempItemNote] = useState("");
@@ -138,7 +139,100 @@ export default function TableOrderScreen({ table, menuItems, customers, onClose,
         )}
       </div>
 
-      {/* Footer Cart Summary & Action Buttons */}
+      {/* Mobile Sticky Compact Cart Summary Bar */}
+      {cart.length > 0 && (
+        <div className="md:hidden fixed bottom-0 inset-x-0 bg-stone-900 border-t border-stone-800 p-3 z-30 flex items-center justify-between shadow-2xl">
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-stone-100">
+              Cart • {cart.length} item{cart.length !== 1 ? "s" : ""}
+            </span>
+            <span className="text-xs font-mono font-bold text-amber-400">
+              {currency(totals.grandTotal)}
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowMobileCartDrawer(true)}
+              className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-400 text-xs font-bold border border-stone-700 cursor-pointer"
+            >
+              View Cart
+            </button>
+            <PrimaryButton
+              disabled={cart.length === 0}
+              data-testid="mobile-generate-bill-btn"
+              onClick={() => setShowBill(true)}
+              className="px-3.5 py-2 text-xs font-bold"
+            >
+              Pay / Bill
+            </PrimaryButton>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Cart Bottom Sheet Drawer */}
+      {showMobileCartDrawer && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-xs flex flex-col justify-end">
+          <div className="bg-stone-900 border-t border-stone-800 rounded-t-3xl p-4 flex flex-col gap-3 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-300">Order Cart Summary</span>
+              <button
+                onClick={() => setShowMobileCartDrawer(false)}
+                className="text-stone-400 text-xs font-bold px-2 py-1 bg-stone-800 rounded-lg"
+              >
+                Close ✕
+              </button>
+            </div>
+
+            <CartSummary
+              cart={cart} menuItems={menuItems}
+              discountPct={discountPct} setDiscountPct={setDiscountPct}
+              gstOn={gstOn} setGstOn={setGstOn}
+            />
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-stone-800">
+              <button
+                onClick={() => { setCart([]); setShowMobileCartDrawer(false); }}
+                className="rounded-xl border border-stone-700 text-stone-300 hover:bg-stone-800 py-2.5 text-xs font-semibold cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                data-testid="mobile-save-order-btn"
+                onClick={() => {
+                  const unavailableCartItem = cart.find((item) => {
+                    const mi = menuItems.find((m) => m.id === item.menuItemId);
+                    return mi && mi.available === false;
+                  });
+                  if (unavailableCartItem) {
+                    const mi = menuItems.find((m) => m.id === unavailableCartItem.menuItemId);
+                    alert(`"${mi?.name || "Item"}" is no longer available.`);
+                    return;
+                  }
+                  onSave(cart, customerName, { priority, orderNotes });
+                  setShowMobileCartDrawer(false);
+                  onClose();
+                }}
+                className="rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-100 py-2.5 text-xs font-bold cursor-pointer"
+              >
+                Save
+              </button>
+              <PrimaryButton
+                disabled={cart.length === 0}
+                data-testid="mobile-generate-bill-btn"
+                onClick={() => { setShowMobileCartDrawer(false); setShowBill(true); }}
+                className="py-2.5 text-xs font-bold"
+              >
+                Bill
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Primary Footer Cart Summary & Action Buttons */}
       <div className="border-t border-stone-800 p-4 flex flex-col gap-3 bg-stone-950">
         <CartSummary
           cart={cart} menuItems={menuItems}
@@ -154,8 +248,8 @@ export default function TableOrderScreen({ table, menuItems, customers, onClose,
           </button>
           <button
             type="button"
+            data-testid="save-order-btn"
             onClick={() => {
-              // PART 20: Validate that no item in cart is unavailable
               const unavailableCartItem = cart.find((item) => {
                 const mi = menuItems.find((m) => m.id === item.menuItemId);
                 return mi && mi.available === false;
@@ -174,6 +268,7 @@ export default function TableOrderScreen({ table, menuItems, customers, onClose,
           </button>
           <PrimaryButton
             disabled={cart.length === 0}
+            data-testid="generate-bill-btn"
             onClick={() => setShowBill(true)}
             className="min-h-[48px] text-xs font-bold"
           >
@@ -192,8 +287,8 @@ export default function TableOrderScreen({ table, menuItems, customers, onClose,
           totals={totals}
           customers={customers}
           onClose={() => setShowBill(false)}
-          onConfirm={(paymentMode, phone, redeemedPoints) => {
-            onGenerateBill(cart, customerName, totals, paymentMode, phone, redeemedPoints);
+          onConfirm={async (paymentMode, phone, redeemedPoints, splitBreakdown) => {
+            await onGenerateBill(cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown);
             setShowBill(false);
             onClose();
           }}

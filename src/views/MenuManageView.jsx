@@ -105,6 +105,7 @@ export default function MenuManageView({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-testid="add-category-btn"
             onClick={() => setShowNewCatModal(true)}
             className="px-3.5 py-2 text-xs font-bold rounded-xl border border-stone-700 bg-stone-800 hover:bg-stone-700 text-stone-200 flex items-center gap-1.5 transition cursor-pointer min-h-[44px]"
           >
@@ -112,6 +113,7 @@ export default function MenuManageView({
           </button>
           <PrimaryButton
             onClick={() => setShowNewItem(true)}
+            data-testid="add-menu-item-btn"
             className="min-h-[44px] px-4 text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer"
           >
             <Plus size={16} /> Add Menu Item
@@ -343,6 +345,7 @@ export default function MenuManageView({
                       <button
                         type="button"
                         onClick={() => setEditingItem(item)}
+                        data-testid={`edit-menu-${item.name}`}
                         className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
                         title="Edit Item"
                       >
@@ -477,6 +480,7 @@ function MenuItemFormModal({ item, categories = [], defaultCategory, onClose, on
             <label className="text-stone-400 font-semibold block mb-1">Item Name *</label>
             <input
               type="text"
+              data-testid="menu-name-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Masala Chai, Cheese Burger"
@@ -489,6 +493,7 @@ function MenuItemFormModal({ item, categories = [], defaultCategory, onClose, on
             <div>
               <label className="text-stone-400 font-semibold block mb-1">Category *</label>
               <select
+                data-testid="menu-category-select"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full rounded-xl bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -503,6 +508,7 @@ function MenuItemFormModal({ item, categories = [], defaultCategory, onClose, on
               <label className="text-stone-400 font-semibold block mb-1">Price (₹) *</label>
               <input
                 type="number"
+                data-testid="menu-price-input"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="e.g. 50"
@@ -554,7 +560,7 @@ function MenuItemFormModal({ item, categories = [], defaultCategory, onClose, on
             >
               Cancel
             </button>
-            <PrimaryButton type="submit" className="min-h-[44px] px-5 text-xs font-bold cursor-pointer">
+            <PrimaryButton type="submit" data-testid="menu-submit-btn" className="min-h-[44px] px-5 text-xs font-bold cursor-pointer">
               {item ? "Save Changes" : "Create Item"}
             </PrimaryButton>
           </div>

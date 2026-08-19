@@ -70,6 +70,7 @@ export default function StockAdjustmentModal({
           <div className="flex items-center gap-1 bg-stone-950 p-1 rounded-xl border border-stone-800">
             <button
               onClick={() => setMode("purchase")}
+              data-testid="mode-purchase-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                 mode === "purchase" ? "bg-amber-500 text-stone-950 shadow-sm" : "text-stone-400 hover:text-stone-200"
               }`}
@@ -79,6 +80,7 @@ export default function StockAdjustmentModal({
             
             <button
               onClick={() => setMode("adjustment")}
+              data-testid="mode-adjust-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                 mode === "adjustment" ? "bg-amber-500 text-stone-950 shadow-sm" : "text-stone-400 hover:text-stone-200"
               }`}
@@ -98,6 +100,7 @@ export default function StockAdjustmentModal({
             <div>
               <label className="text-xs text-stone-400 block mb-1">Select Ingredient *</label>
               <select
+                data-testid="purchase-ingr-select"
                 value={purchaseForm.ingredientId}
                 onChange={(e) => {
                   const item = inventory.find(i => i.id === e.target.value);
@@ -120,6 +123,7 @@ export default function StockAdjustmentModal({
                   type="number"
                   step="any"
                   required
+                  data-testid="purchase-qty-input"
                   value={purchaseForm.qty}
                   onChange={(e) => setPurchaseForm({ ...purchaseForm, qty: e.target.value })}
                   placeholder="e.g. 10"
@@ -132,6 +136,7 @@ export default function StockAdjustmentModal({
                 <input
                   type="number"
                   step="any"
+                  data-testid="purchase-cost-input"
                   value={purchaseForm.cost}
                   onChange={(e) => setPurchaseForm({ ...purchaseForm, cost: e.target.value })}
                   placeholder="e.g. 600"
@@ -182,7 +187,7 @@ export default function StockAdjustmentModal({
               >
                 Cancel
               </button>
-              <PrimaryButton type="submit" className="flex-1 min-h-[44px] text-xs font-bold">
+              <PrimaryButton type="submit" data-testid="purchase-submit-btn" className="flex-1 min-h-[44px] text-xs font-bold">
                 Add Purchase Entry
               </PrimaryButton>
             </div>
@@ -195,6 +200,7 @@ export default function StockAdjustmentModal({
             <div>
               <label className="text-xs text-stone-400 block mb-1">Select Ingredient *</label>
               <select
+                data-testid="adjust-ingr-select"
                 value={adjustForm.ingredientId}
                 onChange={(e) => setAdjustForm({ ...adjustForm, ingredientId: e.target.value })}
                 className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -207,6 +213,7 @@ export default function StockAdjustmentModal({
               <div>
                 <label className="text-xs text-stone-400 block mb-1">Adjustment Type *</label>
                 <select
+                  data-testid="adjust-type-select"
                   value={adjustForm.type}
                   onChange={(e) => setAdjustForm({ ...adjustForm, type: e.target.value })}
                   className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -224,6 +231,7 @@ export default function StockAdjustmentModal({
                   type="number"
                   step="any"
                   required
+                  data-testid="adjust-qty-input"
                   value={adjustForm.qty}
                   onChange={(e) => setAdjustForm({ ...adjustForm, qty: e.target.value })}
                   placeholder="e.g. 2"
@@ -237,6 +245,7 @@ export default function StockAdjustmentModal({
               <input
                 type="text"
                 required
+                data-testid="adjust-reason-input"
                 value={adjustForm.reason}
                 onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
                 placeholder="e.g. Spilled milk during rush, Expired bun..."
@@ -262,7 +271,7 @@ export default function StockAdjustmentModal({
               >
                 Cancel
               </button>
-              <PrimaryButton type="submit" className="flex-1 min-h-[44px] text-xs font-bold">
+              <PrimaryButton type="submit" data-testid="adjust-submit-btn" className="flex-1 min-h-[44px] text-xs font-bold">
                 Apply Adjustment
               </PrimaryButton>
             </div>

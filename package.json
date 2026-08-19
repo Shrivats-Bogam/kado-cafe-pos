@@ -8,6 +8,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build && netlify deploy --prod --dir=dist",
+    "secret-scan": "node src/lib/secretScanner.js",
+    "test:unit": "node tests/e2e/e2eGuard.js",
+    "test:security": "cmd /c \"set VITE_APP_ENV=e2e&& set VITE_CAFE_ID=kado-cafe-e2e&& node tests/e2e/b11MultiTenantSecurity.js && node tests/e2e/b10TransactionSecurity.js\"",
+    "test:integration": "cmd /c \"set VITE_APP_ENV=e2e&& set VITE_CAFE_ID=kado-cafe-e2e&& node tests/e2e/b12ObservabilityAudit.js\"",
+    "test:e2e": "cmd /c \"set VITE_APP_ENV=e2e&& set VITE_CAFE_ID=kado-cafe-e2e&& node tests/e2e/b14DeploymentAudit.js\"",
+    "test:stress": "cmd /c \"set VITE_APP_ENV=e2e&& set VITE_CAFE_ID=kado-cafe-e2e&& node tests/e2e/b13StressAudit.js\"",
+    "test:smoke": "cmd /c \"set VITE_APP_ENV=e2e&& set VITE_CAFE_ID=kado-cafe-e2e&& node tests/e2e/b15ProductionSmoke.js\"",
+    "test:rc": "cmd /c \"set VITE_APP_ENV=e2e&& set VITE_CAFE_ID=kado-cafe-e2e&& node tests/e2e/b15ReleaseCandidate.js\"",
+    "test:all": "npm run secret-scan && npm run test:security && npm run test:integration && npm run test:e2e && npm run test:stress && npm run test:smoke && npm run test:rc",
     "perf": "node src/performance/measurements.js"
   },
   "dependencies": {
@@ -21,6 +30,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
+    "puppeteer": "^25.5.0",
     "tailwindcss": "^3.4.13",
     "vite": "^5.4.8",
     "vite-plugin-compression": "^0.5.1"

@@ -5,9 +5,20 @@ export function TableCapacityPicker({ value = 4, onChange }) {
 
   return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-semibold text-stone-300 flex items-center gap-1.5">
-        <Users size={14} className="text-amber-400" /> Guest Seating Capacity
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="block text-xs font-semibold text-stone-300 flex items-center gap-1.5">
+          <Users size={14} className="text-amber-400" /> Guest Seating Capacity
+        </label>
+        <input
+          type="number"
+          min="1"
+          max="50"
+          data-testid="table-capacity-input"
+          value={value}
+          onChange={(e) => onChange(Math.max(1, Number(e.target.value)))}
+          className="w-20 min-h-[36px] rounded-lg bg-stone-800 border border-stone-700 px-2.5 text-xs text-stone-100 font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
+        />
+      </div>
       <div className="grid grid-cols-5 sm:grid-cols-9 gap-1.5">
         {capacities.map((cap) => {
           const isSelected = Number(value) === cap;

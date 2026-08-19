@@ -1,5 +1,5 @@
 import { useRef, useCallback } from "react";
-import { Users, Clock, ShoppingBag, ArrowRight, Zap, StickyNote, MapPin } from "lucide-react";
+import { Users, Clock, ShoppingBag, ArrowRight, Zap, StickyNote, MapPin, Edit2 } from "lucide-react";
 import TableStatusBadge from "./TableStatusBadge.jsx";
 import { currency, orderTotal, formatElapsedTime } from "../lib/currency.js";
 
@@ -10,7 +10,7 @@ export const TABLE_SHAPES = [
   { id: "sofa", label: "Sofa / Lounge", icon: "🛋", desc: "Lounge sofa seating" },
 ];
 
-export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMenu }) {
+export default function TableCard({ table, menuItems, onOpenTable, onEditTable, onOpenMoreMenu }) {
   const { grandTotal } = orderTotal(table.items || [], menuItems);
   const elapsedTimeStr = formatElapsedTime(table.startedAt);
   const touchTimerRef = useRef(null);
@@ -75,6 +75,7 @@ export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMen
       onClick={handleCardClick}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      data-testid={`table-card-${table.number}`}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -116,10 +117,25 @@ export default function TableCard({ table, menuItems, onOpenTable, onOpenMoreMen
           </div>
         </div>
 
-        <span className="inline-flex items-center gap-1 text-xs font-extrabold text-stone-200 bg-stone-800/90 border border-stone-700/80 px-2.5 py-1 rounded-xl shadow-inner shrink-0 min-h-[32px]">
-          <Users size={13} className="text-amber-400" />
-          {capacity}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            data-testid={`edit-table-btn-${table.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onEditTable) onEditTable(table);
+              else if (onOpenMoreMenu) onOpenMoreMenu(table);
+            }}
+            className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-stone-100 border border-stone-700 transition cursor-pointer"
+            title="Edit Table"
+          >
+            <Edit2 size={13} className="text-amber-400" />
+          </button>
+          <span className="inline-flex items-center gap-1 text-xs font-extrabold text-stone-200 bg-stone-800/90 border border-stone-700/80 px-2.5 py-1 rounded-xl shadow-inner min-h-[32px]">
+            <Users size={13} className="text-amber-400" />
+            {capacity}
+          </span>
+        </div>
       </div>
 
       {/* Body: Status Badge, Customer Name, Large Bill Amount & Items/Timer */}

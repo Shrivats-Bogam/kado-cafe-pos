@@ -37,7 +37,7 @@ export default function RecipeBuilder({
     const next = [...currentIngredients];
     next[index] = {
       ...next[index],
-      [field]: field === "qty" ? Math.max(0.001, Number(value) || 0) : value
+      [field]: value
     };
     setCurrentIngredients(next);
   };
@@ -48,8 +48,10 @@ export default function RecipeBuilder({
 
   const handleSave = () => {
     if (!selectedMenuId) return;
-    // Filter out rows with invalid/0 qty
-    const cleanIngredients = currentIngredients.filter((r) => r.qty > 0 && r.ingredientId);
+    // Filter out rows with invalid/0 qty and cast qty to Number
+    const cleanIngredients = currentIngredients
+      .map((r) => ({ ...r, qty: Math.max(0.001, Number(r.qty) || 0) }))
+      .filter((r) => r.qty > 0 && r.ingredientId);
     onSaveRecipe(selectedMenuId, cleanIngredients);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
@@ -107,6 +109,7 @@ export default function RecipeBuilder({
             <button
               type="button"
               onClick={handleAddIngredientRow}
+              data-testid="recipe-add-ingredient-btn"
               disabled={inventory.length === 0}
               className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 min-h-[44px] cursor-pointer"
             >
@@ -129,6 +132,7 @@ export default function RecipeBuilder({
                     <div className="flex-1">
                       <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">Ingredient Product</label>
                       <select
+                        data-testid={`recipe-ingredient-select-${idx}`}
                         value={row.ingredientId}
                         onChange={(e) => handleUpdateRow(idx, "ingredientId", e.target.value)}
                         className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -147,6 +151,7 @@ export default function RecipeBuilder({
                         type="number"
                         step="any"
                         min="0.001"
+                        data-testid={`recipe-ingredient-qty-${idx}`}
                         value={row.qty}
                         onChange={(e) => handleUpdateRow(idx, "qty", e.target.value)}
                         className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-stone-100 focus:outline-none focus:border-amber-500"
@@ -170,13 +175,49 @@ export default function RecipeBuilder({
           )}
         </div>
 
+        {/* Live Portion Stock Deduction Preview */}
+        {currentIngredients.length > 0 && (
+          <div className="p-3.5 rounded-xl bg-stone-950 border border-stone-800 space-y-2">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
+              ⚡ Portion Stock Deduction Preview (per 1 order of {selectedMenuItem?.name})
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              {currentIngredients.map((row, idx) => {
+                const matched = inventory.find((i) => i.id === row.ingredientId);
+                if (!matched) return null;
+                const portionQty = Number(row.qty) || 0;
+                const currentStock = Number(matched.currentStock) || 0;
+                const afterStock = Math.max(0, Math.round((currentStock - portionQty) * 1000) / 1000);
+
+                return (
+                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-stone-900 border border-stone-800/80">
+                    <span className="font-medium text-stone-200">{matched.name}</span>
+                    <span className="font-mono text-[11px]">
+                      <span className="text-rose-400 font-bold">-{portionQty} {matched.unit}</span>{" "}
+                      <span className="text-stone-500">({currentStock} → {afterStock} {matched.unit})</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="pt-4 border-t border-stone-800 flex items-center justify-between">
-          <span className="text-xs text-stone-400">
-            {currentIngredients.length} ingredient{currentIngredients.length !== 1 ? "s" : ""} in recipe
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-stone-400">
+              {currentIngredients.length} ingredient{currentIngredients.length !== 1 ? "s" : ""} in recipe
+            </span>
+            {savedSuccess && (
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 animate-pulse">
+                <Check size={13} /> Recipe saved successfully.
+              </span>
+            )}
+          </div>
 
           <PrimaryButton
             onClick={handleSave}
+            data-testid="recipe-save-btn"
             disabled={!selectedMenuId}
             className="min-h-[44px] px-6 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
           >
