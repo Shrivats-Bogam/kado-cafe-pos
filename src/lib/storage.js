@@ -28,9 +28,12 @@ export const SCHEMA_VERSION = 1;
 // Environment-aware state key target:
 // Production uses "kado-cafe"
 // E2E test runs use "kado-cafe-e2e"
-const metaEnv = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : {};
-export const CAFE_ID = process.env.VITE_CAFE_ID || metaEnv.VITE_CAFE_ID || (IS_E2E ? "kado-cafe-e2e" : "kado-cafe");
-export const LS_KEY = process.env.VITE_LS_KEY || metaEnv.VITE_LS_KEY || (IS_E2E ? "kado-cafe-e2e-state" : "kado-cafe-state");
+const nodeEnv = (typeof process !== "undefined" && process && process.env) ? process.env : {};
+const metaEnv = (typeof import.meta !== "undefined" && import.meta && import.meta.env) ? import.meta.env : {};
+const getEnv = (key) => metaEnv[key] || nodeEnv[key] || "";
+
+export const CAFE_ID = getEnv("VITE_CAFE_ID") || (IS_E2E ? "kado-cafe-e2e" : "kado-cafe");
+export const LS_KEY = getEnv("VITE_LS_KEY") || (IS_E2E ? "kado-cafe-e2e-state" : "kado-cafe-state");
 
 // Hard Safety Guard: If IS_E2E is true and CAFE_ID is "kado-cafe", ABORT immediately!
 if (IS_E2E && CAFE_ID === "kado-cafe") {
@@ -43,8 +46,8 @@ if (typeof window !== "undefined") {
   window.__KADO_LS_KEY = LS_KEY;
 }
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || metaEnv.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || metaEnv.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = getEnv("VITE_SUPABASE_URL");
+const supabaseAnonKey = getEnv("VITE_SUPABASE_ANON_KEY");
 
 let supabase = null;
 let useSupabase = false;

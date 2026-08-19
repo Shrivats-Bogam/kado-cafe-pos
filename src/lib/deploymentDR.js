@@ -9,13 +9,15 @@ import { IS_E2E, APP_ENV } from "./env.js";
  * @returns {object} Status map of required environment variables
  */
 export function verifyEnvironmentConfig() {
-  const metaEnv = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : {};
+  const nodeEnv = (typeof process !== "undefined" && process && process.env) ? process.env : {};
+  const metaEnv = (typeof import.meta !== "undefined" && import.meta && import.meta.env) ? import.meta.env : {};
+  const getEnv = (key) => metaEnv[key] || nodeEnv[key] || "";
 
   const vars = {
-    VITE_APP_ENV: process.env.VITE_APP_ENV || metaEnv.VITE_APP_ENV,
-    VITE_CAFE_ID: process.env.VITE_CAFE_ID || metaEnv.VITE_CAFE_ID,
-    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || metaEnv.VITE_SUPABASE_URL,
-    VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || metaEnv.VITE_SUPABASE_ANON_KEY
+    VITE_APP_ENV: getEnv("VITE_APP_ENV"),
+    VITE_CAFE_ID: getEnv("VITE_CAFE_ID"),
+    VITE_SUPABASE_URL: getEnv("VITE_SUPABASE_URL"),
+    VITE_SUPABASE_ANON_KEY: getEnv("VITE_SUPABASE_ANON_KEY")
   };
 
   const status = {};
