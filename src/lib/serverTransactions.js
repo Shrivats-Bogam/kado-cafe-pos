@@ -12,6 +12,30 @@ export function createTransactionIdempotencyKey(prefix = "tx") {
 }
 
 /**
+ * Safe development auth session diagnostics helper
+ * @param {object} supabaseClient 
+ * @returns {Promise<{hasSession: boolean, userId: string|null, sessionExpiresAt: number|null}>}
+ */
+export async function getAuthDiagnostics(supabaseClient = null) {
+  if (!supabaseClient || typeof supabaseClient.auth?.getSession !== "function") {
+    return { hasSession: false, userId: null, sessionExpiresAt: null };
+  }
+  try {
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    if (error || !session) {
+      return { hasSession: false, userId: null, sessionExpiresAt: null };
+    }
+    return {
+      hasSession: true,
+      userId: session.user?.id || null,
+      sessionExpiresAt: session.expires_at || null,
+    };
+  } catch {
+    return { hasSession: false, userId: null, sessionExpiresAt: null };
+  }
+}
+
+/**
  * Execute server-authoritative payment settlement transaction
  * @param {object} params
  * @param {object} params.supabaseClient
@@ -47,6 +71,14 @@ export async function executeServerPayment({
 
   // Execute B4A RPC if Supabase client available
   if (supabaseClient && typeof supabaseClient.rpc === "function") {
+    // Development auth session check
+    if (typeof supabaseClient.auth?.getSession === "function") {
+      const { data: sessionData, error: sessionErr } = await supabaseClient.auth.getSession();
+      if (sessionErr || !sessionData?.session?.user) {
+        throw new Error("AUTH_SESSION_MISSING: Authentication session required before executing server financial transactions.");
+      }
+    }
+
     const { data, error } = await supabaseClient.rpc("record_server_payment", {
       p_order_id: orderId.trim(),
       p_amount: numAmount,
@@ -116,32 +148,73 @@ export async function executeServerSplitPayment({
     throw new Error("OFFLINE_PAYMENT_BLOCKED: Financial transactions cannot be settled while offline. Reconnect to proceed.");
   }
 
-  const results = [];
-  let totalSettled = 0;
+  // Execute B4A RPC for each split if Supabase client available
+  if (supabaseClient && typeof supabaseClient.rpc === "function") {
+    // Development auth session check
+    if (typeof supabaseClient.auth?.getSession === "function") {
+      const { data: sessionData, error: sessionErr } = await supabaseClient.auth.getSession();
+      if (sessionErr || !sessionData?.session?.user) {
+        throw new Error("AUTH_SESSION_MISSING: Authentication session required before executing server financial transactions.");
+      }
+    }
 
-  for (let i = 0; i < splitPayments.length; i++) {
-    const split = splitPayments[i];
-    const subKey = `${key}_${split.method || "Cash"}_${i + 1}`;
-    const legResult = await executeServerPayment({
-      supabaseClient,
-      orderId,
-      paymentMethod: split.method || "Cash",
-      amount: Number(split.amount),
-      idempotencyKey: subKey,
-      isOffline
-    });
-    results.push(legResult);
-    totalSettled += Number(split.amount);
+    const results = [];
+    let totalSettled = 0;
+
+    for (let i = 0; i < splitPayments.length; i++) {
+      const entry = splitPayments[i];
+      const entryAmount = Number(entry.amount);
+      const splitKey = `${key}_part${i + 1}`;
+
+      const { data, error } = await supabaseClient.rpc("record_server_payment", {
+        p_order_id: orderId.trim(),
+        p_amount: entryAmount,
+        p_payment_method: entry.method || "Cash",
+        p_idempotency_key: splitKey
+      });
+
+      if (error) {
+        throw new Error(`SERVER_SPLIT_PAYMENT_FAILED [${entry.method}]: ${error.message}`);
+      }
+
+      if (!data || data.success === false) {
+        throw new Error(data?.error || `Split payment failed for ${entry.method}`);
+      }
+
+      results.push(data);
+      totalSettled += entryAmount;
+    }
+
+    return {
+      success: true,
+      status: "PAID_SPLIT",
+      order_id: orderId,
+      total_settled: totalSettled,
+      total_amount: totalSettled,
+      splits: results,
+      ledger_id: results[0]?.ledger_id || null,
+      payment_id: results[0]?.payment_id || null,
+      idempotency_key: key
+    };
   }
 
+  // Local/Offline fallback
+  const simulatedTotal = splitPayments.reduce((s, p) => s + Number(p.amount), 0);
   return {
     success: true,
     status: "PAID_SPLIT",
     order_id: orderId,
-    total_settled: totalSettled,
-    splits_count: results.length,
-    splits: results,
-    idempotency_key: key
+    total_settled: simulatedTotal,
+    total_amount: simulatedTotal,
+    splits: splitPayments.map((p, i) => ({
+      payment_id: `pay_split_${orderId}_${i + 1}`,
+      ledger_id: `led_split_${orderId}_${i + 1}`,
+      amount: Number(p.amount),
+      method: p.method
+    })),
+    ledger_id: `led_split_${orderId}_1`,
+    idempotency_key: key,
+    simulated: true
   };
 }
 
@@ -179,6 +252,14 @@ export async function executeServerRefund({
   }
 
   if (supabaseClient && typeof supabaseClient.rpc === "function") {
+    // Development auth session check
+    if (typeof supabaseClient.auth?.getSession === "function") {
+      const { data: sessionData, error: sessionErr } = await supabaseClient.auth.getSession();
+      if (sessionErr || !sessionData?.session?.user) {
+        throw new Error("AUTH_SESSION_MISSING: Authentication session required before executing server financial transactions.");
+      }
+    }
+
     const { data, error } = await supabaseClient.rpc("record_server_refund", {
       p_order_id: orderId.trim(),
       p_refund_amount: numRefund,

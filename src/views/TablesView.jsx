@@ -34,10 +34,11 @@ export default function TablesView({
   const [editingTable, setEditingTable] = useState(null);
   const [deletingTableId, setDeletingTableId] = useState(null);
 
-  // Compute status counts for filter pills
+  // Compute status counts for filter pills (active tables only)
   const counts = useMemo(() => {
+    const activeList = (tables || []).filter((t) => t && t.status !== "archived");
     const map = {
-      all: tables.length,
+      all: activeList.length,
       available: 0,
       occupied: 0,
       preparing: 0,
@@ -48,7 +49,7 @@ export default function TablesView({
       rush: 0,
     };
 
-    tables.forEach((t) => {
+    activeList.forEach((t) => {
       if (t.status === "available") map.available++;
       if (t.status === "cleaning") map.cleaning++;
       if (t.status === "reserved" || t.isReserved) map.reserved++;
@@ -70,9 +71,10 @@ export default function TablesView({
     return map;
   }, [tables]);
 
-  // Filter tables based on search query and active filter
+  // Filter active tables based on search query and active filter
   const filteredTables = useMemo(() => {
-    return tables.filter((t) => {
+    const activeList = (tables || []).filter((t) => t && t.status !== "archived");
+    return activeList.filter((t) => {
       // 1. Multi-Field Search (Table #, Table Name, Customer Name, Phone, Bill ID, Notes)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();

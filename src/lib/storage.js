@@ -62,7 +62,12 @@ if (
 ) {
   try {
     supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: "kado-cafe-supabase-auth",
+      },
     });
     useSupabase = true;
     console.info(`[kado-cafe] Supabase storage enabled (${CAFE_ID})`);

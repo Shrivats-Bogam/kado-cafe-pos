@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Coffee, LayoutDashboard, ChefHat, Package, Menu as MenuIcon,
-  Users, Sparkles, BarChart3, Settings, LogOut, Calculator as CalculatorIcon, ShieldCheck
+  Users, Sparkles, BarChart3, Settings, LogOut, Lock, Calculator as CalculatorIcon, ShieldCheck
 } from "lucide-react";
 
 import LoginScreen from "../components/LoginScreen.jsx";
@@ -27,7 +27,7 @@ import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
 import { fireStatusToasts } from "../state/kitchenRealtime.js";
-import { initializeAuthSession, loginWithEmail, logoutUser } from "../lib/auth.js";
+import { initializeAuthSession, loginWithEmail, logoutUser, resolveOrganizationMembership } from "../lib/auth.js";
 import { filterProductionAccounts } from "../lib/env.js";
 import { executeServerPayment, executeServerSplitPayment, executeServerRefund } from "../lib/serverTransactions.js";
 import { makeId } from "../lib/id.js";
@@ -49,7 +49,8 @@ const TABS = [
 
 export default function StaffApp() {
   const [state, setStateRaw] = useState(null);
-  const [currentUser, setCurrentUser] = useState(loadSession);  // ← hydrate from localStorage on first render
+  const [currentUser, setCurrentUser] = useState(null);
+  const [cloudSession, setCloudSession] = useState(null);
   const [tab, setTab] = useState(() => loadUIState()?.tab || "dashboard");
   const [openTableId, setOpenTableId] = useState(() => loadUIState()?.openTableId || null);
   const [qrTableId, setQrTableId] = useState(null);
@@ -63,12 +64,75 @@ export default function StaffApp() {
   const toaster = useToaster();
   const soundEnabled = loadUIState()?.soundEnabled !== false;
 
-  // ---------- Load ----------
+  // ---------- Load & Auth Lifecycle ----------
   useEffect(() => {
+    let authUnsub = null;
     (async () => {
       try {
         const supabase = getSupabaseClient();
-        await initializeAuthSession(supabase);
+
+        // 1. Register Supabase Auth State Change Listener
+        if (supabase && typeof supabase.auth?.onAuthStateChange === "function") {
+          const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+              if (session?.user) {
+                const membership = await resolveOrganizationMembership(supabase, session.user.id);
+                if (membership && membership.active !== false) {
+                  const trustedUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: membership.name,
+                    role: membership.role,
+                    organization_id: membership.organization_id,
+                    isCloud: true,
+                    active: true,
+                  };
+                  setCloudSession({ user: session.user, membership, role: membership.role });
+                  setCurrentUser((prev) => (prev ? prev : trustedUser));
+                } else {
+                  toaster.push("Account disabled or access revoked.", "rush");
+                  await logoutUser(supabase);
+                  setCurrentUser(null);
+                  setCloudSession(null);
+                  clearSession();
+                }
+              }
+            } else if (event === "SIGNED_OUT") {
+              setCurrentUser(null);
+              setCloudSession(null);
+              clearSession();
+            }
+          });
+          authUnsub = subscription;
+        }
+
+        // 2. Initialize Auth Session on Boot
+        const authData = await initializeAuthSession(supabase);
+        if (authData && authData.user) {
+          setCloudSession(authData);
+          const trustedUser = {
+            id: authData.user.id,
+            email: authData.user.email,
+            name: authData.member?.name || authData.user.email?.split("@")[0] || "User",
+            role: authData.role,
+            organization_id: authData.organization_id,
+            isCloud: true,
+            active: true,
+          };
+          // If a local employee PIN session was persisted, verify it
+          const localSess = loadSession();
+          if (localSess && !localSess.isCloud) {
+            setCurrentUser(localSess);
+          } else {
+            setCurrentUser(trustedUser);
+          }
+        } else {
+          setCloudSession(null);
+          setCurrentUser(null);
+          clearSession();
+        }
+
+        // 3. Load Application State
         const json = await getState();
         const next = json ? { ...defaultState(), ...JSON.parse(json) } : defaultState();
 
@@ -82,6 +146,10 @@ export default function StaffApp() {
       }
       setLoaded(true);
     })();
+
+    return () => {
+      authUnsub && authUnsub.unsubscribe && authUnsub.unsubscribe();
+    };
   }, []);
 
   // ---------- Persist session ----------
@@ -263,6 +331,7 @@ export default function StaffApp() {
       isCloud: true,
     };
 
+    setCloudSession(session);
     setCurrentUser(authenticatedCloudUser);
 
     update((s) => actions.recordActivityLog(s, {
@@ -277,31 +346,39 @@ export default function StaffApp() {
   if (!currentUser) {
     return (
       <>
-        <LoginScreen users={loginUsers} onLogin={(u) => {
-          // Authoritative employee lookup from state.employees
-          const emp = (state.employees || []).find(e => (e.id && e.id === u.id) || (e.pin && e.pin === u.pin));
-          if (emp && (emp.status === "disabled" || emp.status === "Inactive")) {
-            toaster.push("Account Disabled. Please contact the Owner.", "rush");
-            return;
-          }
+        <LoginScreen
+          users={loginUsers}
+          hasCloudSession={Boolean(cloudSession?.user)}
+          cloudUser={cloudSession?.member?.name || cloudSession?.user?.email}
+          onLogin={(u) => {
+            // Authoritative employee lookup from state.employees
+            const emp = (state.employees || []).find(e => (e.id && e.id === u.id) || (e.pin && e.pin === u.pin));
+            if (emp && (emp.status === "disabled" || emp.status === "Inactive")) {
+              toaster.push("Account Disabled. Please contact the Owner.", "rush");
+              return;
+            }
 
-          // Always construct user payload from authoritative state.employees record
-          const authenticatedUser = emp ? {
-            id: emp.id,
-            name: emp.name,
-            role: emp.role,
-            pin: emp.pin,
-            status: emp.status
-          } : u;
+            // Always construct user payload from authoritative state.employees record
+            const authenticatedUser = emp ? {
+              id: emp.id,
+              name: emp.name,
+              role: emp.role,
+              pin: emp.pin,
+              status: emp.status,
+              isCloud: true,
+              organization_id: cloudSession?.organization_id || cloudSession?.membership?.organization_id || "00000000-0000-0000-0000-000000000001",
+            } : { ...u, isCloud: true };
 
-          setCurrentUser(authenticatedUser);
-          // Record login activity
-          update((s) => actions.recordActivityLog(s, {
-            employeeName: authenticatedUser.name,
-            action: "Logged into POS",
-            module: "Auth"
-          }));
-        }} onCloudLogin={handleCloudLogin} />
+            setCurrentUser(authenticatedUser);
+            // Record login activity
+            update((s) => actions.recordActivityLog(s, {
+              employeeName: authenticatedUser.name,
+              action: "Logged into POS via PIN",
+              module: "Auth"
+            }));
+          }}
+          onCloudLogin={handleCloudLogin}
+        />
         <Toaster toaster={toaster} />
       </>
     );
@@ -414,12 +491,21 @@ export default function StaffApp() {
   const addUser = (user) => update((s) => actions.addUser(s, user));
   const removeUser = (id) => update((s) => actions.removeUser(s, id));
 
-  const logout = () => {
-    logoutUser(getSupabaseClient());
+  const logout = async () => {
+    const supabase = getSupabaseClient();
+    await logoutUser(supabase);
+    setCloudSession(null);
     clearSession();
-    saveUIState({ tab, openTableId: null, soundEnabled }); // remember UI but close table view
+    saveUIState({ tab, openTableId: null, soundEnabled });
     setOpenTableId(null);
     setCurrentUser(null);
+  };
+
+  const lockShift = () => {
+    // Quick lock to return to PIN selection screen
+    setCurrentUser(null);
+    saveUIState({ tab, openTableId: null, soundEnabled });
+    setOpenTableId(null);
   };
 
   // ---------- Render ----------
@@ -463,16 +549,27 @@ export default function StaffApp() {
           {allowedTabs.includes("settings") && (
             <button
               onClick={() => setShowSettings(true)}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-stone-400 hover:bg-stone-900"
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-stone-400 hover:bg-stone-900 cursor-pointer"
             >
               <Settings size={16} /> Settings
             </button>
           )}
           <button
-            onClick={logout}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-stone-400 hover:bg-stone-900"
+            onClick={lockShift}
+            title="Lock POS / Switch Shift"
+            className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-stone-300 bg-stone-900 border border-stone-800 hover:border-amber-500/50 transition cursor-pointer"
           >
-            <LogOut size={16} /> {currentUser.name}
+            <span className="flex items-center gap-2 truncate">
+              <Lock size={15} className="text-amber-400" /> {currentUser.name}
+            </span>
+            <span className="text-[10px] text-stone-500 uppercase font-semibold">Lock</span>
+          </button>
+          <button
+            onClick={logout}
+            title="Sign out of Cloud Account on this device"
+            className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-stone-500 hover:text-rose-400 transition cursor-pointer"
+          >
+            <LogOut size={13} /> Cloud Sign Out
           </button>
         </div>
       </div>
@@ -493,7 +590,10 @@ export default function StaffApp() {
                 <Settings size={15} />
               </button>
             )}
-            <button onClick={logout} className="rounded-xl p-2 bg-stone-800 hover:bg-stone-700">
+            <button onClick={lockShift} title="Lock POS" className="rounded-xl p-2 bg-stone-800 hover:bg-stone-700 text-stone-300">
+              <Lock size={15} />
+            </button>
+            <button onClick={logout} title="Cloud Sign Out" className="rounded-xl p-2 bg-stone-800 hover:bg-stone-700 text-stone-400">
               <LogOut size={15} />
             </button>
           </div>
@@ -693,13 +793,23 @@ export default function StaffApp() {
       {openTable && (
         <TableOrderScreen
           table={openTable}
+          tables={state.tables}
           menuItems={state.menuItems}
           customers={state.customers}
+          currentUser={currentUser}
           onClose={() => setOpenTableId(null)}
           onSave={(cart, customerName, opts) => saveTableOrder(openTable.id, cart, customerName, opts)}
-          onGenerateBill={(cart, customerName, totals, paymentMode, phone, redeemedPoints) =>
-            generateBillForTable(openTable.id, cart, customerName, totals, paymentMode, phone, redeemedPoints)
+          onGenerateBill={(cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown) =>
+            generateBillForTable(openTable.id, cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown)
           }
+          onSetStatus={(status) => setTableStatus(openTable.id, status)}
+          onDeleteTable={(tableId) => {
+            deleteTable(tableId);
+            setOpenTableId(null);
+          }}
+          onTransferTable={(fromId, toId) => transferTable(fromId, toId)}
+          onMergeTable={(sourceId, targetId) => mergeTables(sourceId, targetId)}
+          onSplitTable={(sourceId, targetId, items) => splitTable(sourceId, targetId, items)}
         />
       )}
       {qrTable && <TableQRModal table={qrTable} onClose={() => setQrTableId(null)} />}
