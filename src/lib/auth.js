@@ -78,6 +78,15 @@ export async function hasActiveCloudAuth(supabaseClient) {
 export async function resolveOrganizationMembership(supabaseClient, userId) {
   if (!supabaseClient || !userId) return null;
   try {
+    // 1. Primary: Use self-healing RPC (resolves or auto-creates Owner record)
+    if (typeof supabaseClient.rpc === "function") {
+      const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("get_my_organization_membership");
+      if (!rpcErr && rpcData && rpcData.success) {
+        return rpcData;
+      }
+    }
+
+    // 2. Direct table lookup fallback
     const { data, error } = await supabaseClient
       .from("organization_members")
       .select("id, organization_id, user_id, name, role, active")
