@@ -633,7 +633,61 @@ export function removeUser(state, id) {
   return { ...state, users: state.users.filter((u) => u.id !== id) };
 }
 
-// Helper: Deduct stock automatically based on item recipes
+/**
+ * Normalizes recipe ingredient quantities to stock inventory units.
+ * Supports:
+ * - Volume: ml <-> litre (1 litre = 1000 ml)
+ * - Weight: g <-> kg (1 kg = 1000 g)
+ * - Count: pcs, unit, pack, can, bottle
+ * Includes smart cafe heuristic: If stock is in 'litre' and qty >= 10,
+ * it safely interprets portion as ml (e.g. 150 ml per tea instead of 150 litres).
+ * If stock is in 'kg' and qty >= 5, it safely interprets portion as grams (e.g. 10 g sugar).
+ */
+export function convertRecipeUnitToStockUnit(qty, recipeUnit, stockUnit) {
+  const numQty = Number(qty) || 0;
+  if (numQty <= 0) return 0;
+
+  const from = String(recipeUnit || "").toLowerCase().trim();
+  const to = String(stockUnit || "").toLowerCase().trim();
+
+  if (from === to && from !== "") return numQty;
+
+  // Volume: ml -> litre
+  if ((from === "ml" || from === "millilitre" || from === "milliliter") && 
+      (to === "litre" || to === "liter" || to === "l")) {
+    return numQty / 1000;
+  }
+  // Volume: litre -> ml
+  if ((from === "litre" || from === "liter" || from === "l") && 
+      (to === "ml" || to === "millilitre" || to === "milliliter")) {
+    return numQty * 1000;
+  }
+
+  // Weight: g -> kg
+  if ((from === "g" || from === "gm" || from === "gram" || from === "grams") && 
+      (to === "kg" || to === "kilogram" || to === "kilograms")) {
+    return numQty / 1000;
+  }
+  // Weight: kg -> g
+  if ((to === "g" || to === "gm" || to === "gram" || to === "grams") && 
+      (from === "kg" || from === "kilogram" || from === "kilograms")) {
+    return numQty * 1000;
+  }
+
+  // Intelligent fallback for legacy recipes without explicit recipeUnit:
+  // If stock is in litre and portion size is >= 10, user entered ml
+  if ((to === "litre" || to === "liter" || to === "l") && numQty >= 10 && !from) {
+    return numQty / 1000;
+  }
+  // If stock is in kg and portion size is >= 5, user entered grams
+  if ((to === "kg" || to === "kilogram" || to === "kilograms") && numQty >= 5 && !from) {
+    return numQty / 1000;
+  }
+
+  return numQty;
+}
+
+// Helper: Deduct stock automatically based on item recipes with unit conversion
 export function deductStockForOrderItems(inventory = [], recipes = {}, inventoryLogs = [], items = [], orderId = "") {
   let nextInventory = [...(inventory || [])];
   let nextLogs = [...(inventoryLogs || [])];
@@ -653,7 +707,10 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
         const invIdx = nextInventory.findIndex((i) => i.id === req.ingredientId || i.name === req.ingredientName);
         if (invIdx >= 0) {
           const invItem = nextInventory[invIdx];
-          const totalDeduction = req.qty * itemQty;
+          // Convert recipe portion (e.g. 150 ml) to stock unit (e.g. 0.15 litre)
+          const singlePortionInStockUnit = convertRecipeUnitToStockUnit(req.qty, req.unit, invItem.unit);
+          const totalDeduction = Math.round(singlePortionInStockUnit * itemQty * 1000) / 1000;
+
           const currentQty = typeof invItem.qty === "number" ? invItem.qty : (typeof invItem.currentStock === "number" ? invItem.currentStock : 50);
           const updatedStock = Math.max(0, Math.round((currentQty - totalDeduction) * 1000) / 1000);
           
@@ -665,6 +722,9 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
 
           const timestamp = new Date().toISOString();
           const refText = `Order #${String(orderId).slice(-6)} (${item.name || "Item"} x${itemQty})`;
+          const portionText = req.unit && req.unit !== invItem.unit 
+            ? `${req.qty * itemQty} ${req.unit} (${totalDeduction} ${invItem.unit})` 
+            : `${totalDeduction} ${invItem.unit}`;
 
           nextLogs.unshift({
             id: makeId("log"),
@@ -678,7 +738,7 @@ export function deductStockForOrderItems(inventory = [], recipes = {}, inventory
             orderId: orderId,
             qty_change: -totalDeduction,
             changeQty: -totalDeduction,
-            reason: `Sale deduction for ${refText}`,
+            reason: `Sale deduction for ${refText}: -${portionText}`,
             timestamp,
             createdAt: timestamp
           });

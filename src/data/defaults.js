@@ -75,18 +75,18 @@ export function defaultInventory() {
 export function defaultRecipes() {
   return {
     "m1": [ // Masala Tea
-      { ingredientId: "inv_1", qty: 150 }, // 150 ml Milk
-      { ingredientId: "inv_2", qty: 8 },   // 8 g Tea
-      { ingredientId: "inv_3", qty: 10 },  // 10 g Sugar
+      { ingredientId: "inv_1", qty: 150, unit: "ml" }, // 150 ml Milk
+      { ingredientId: "inv_2", qty: 8, unit: "g" },     // 8 g Tea
+      { ingredientId: "inv_3", qty: 10, unit: "g" },    // 10 g Sugar
     ],
     "m2": [ // Espresso / Coffee
-      { ingredientId: "inv_4", qty: 0.018 }, // 18 g Coffee beans (0.018 kg)
+      { ingredientId: "inv_4", qty: 18, unit: "g" },    // 18 g Coffee beans (stored in kg)
     ],
     "m3": [ // Veg Burger
-      { ingredientId: "inv_5", qty: 1 },  // 1 Bun
-      { ingredientId: "inv_6", qty: 1 },  // 1 Patty
-      { ingredientId: "inv_7", qty: 1 },  // 1 Cheese slice
-      { ingredientId: "inv_8", qty: 15 }, // 15 ml Sauce
+      { ingredientId: "inv_5", qty: 1, unit: "pcs" },   // 1 Bun
+      { ingredientId: "inv_6", qty: 1, unit: "pcs" },   // 1 Patty
+      { ingredientId: "inv_7", qty: 1, unit: "pcs" },   // 1 Cheese slice
+      { ingredientId: "inv_8", qty: 15, unit: "ml" },   // 15 ml Sauce
     ]
   };
 }
@@ -150,9 +150,9 @@ export function defaultEmployees() {
     {
       id: "emp_1",
       employeeId: "EMP-101",
-      name: "Alex Morgan",
+      name: "Kandge",
       phone: "9876543210",
-      email: "alex@kadocafe.com",
+      email: "shrivats.bogam@gmail.com",
       role: "Owner",
       department: "Management",
       pin: "1234",
@@ -162,11 +162,11 @@ export function defaultEmployees() {
     {
       id: "emp_2",
       employeeId: "EMP-102",
-      name: "Sarah Jenkins",
+      name: "Varad",
       phone: "9812345678",
-      email: "sarah@kadocafe.com",
-      role: "Manager",
-      department: "Operations",
+      email: "varad@kadocafe.com",
+      role: "Waiter",
+      department: "Service",
       pin: "0000",
       status: "active",
       joinedAt: "2024-02-01",
@@ -179,18 +179,18 @@ export function defaultEmployees() {
       email: "david@kadocafe.com",
       role: "Kitchen",
       department: "Kitchen",
-      pin: "5555",
+      pin: "2222",
       status: "active",
       joinedAt: "2024-03-10",
     },
     {
       id: "emp_4",
       employeeId: "EMP-104",
-      name: "Emily Watson",
+      name: "Staff",
       phone: "9654321098",
-      email: "emily@kadocafe.com",
-      role: "Waiter",
-      department: "Service",
+      email: "staff@kadocafe.com",
+      role: "Staff",
+      department: "Operations",
       pin: "1111",
       status: "active",
       joinedAt: "2024-04-05",
@@ -289,7 +289,7 @@ export function defaultState() {
     rolePermissions: defaultRolePermissions(),
     shifts: [],
     activityLogs: [
-      { id: "log_1", employeeName: "Alex Morgan", action: "Logged in", module: "Auth", timestamp: new Date().toISOString() }
+      { id: "log_1", employeeName: "Kandge", action: "Logged in", module: "Auth", timestamp: new Date().toISOString() }
     ],
     assistanceRequests: [],
     customerFeedback: [],

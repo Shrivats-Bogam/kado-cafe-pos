@@ -1,6 +1,38 @@
-import { useState, useMemo } from "react";
-import { Plus, Trash2, Check, BookOpen, Utensils, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2, Check, BookOpen, Utensils } from "lucide-react";
 import { Card, PrimaryButton } from "./ui.jsx";
+import { convertRecipeUnitToStockUnit } from "../state/actions.js";
+
+function getPortionUnitsForStockUnit(stockUnit) {
+  const u = String(stockUnit || "").toLowerCase().trim();
+  if (u === "litre" || u === "liter" || u === "l") {
+    return [
+      { value: "ml", label: "ml" },
+      { value: "litre", label: "litre" }
+    ];
+  }
+  if (u === "kg" || u === "kilogram" || u === "kilograms") {
+    return [
+      { value: "g", label: "g" },
+      { value: "kg", label: "kg" }
+    ];
+  }
+  if (u === "g" || u === "gm" || u === "gram") {
+    return [
+      { value: "g", label: "g" }
+    ];
+  }
+  return [
+    { value: stockUnit || "pcs", label: stockUnit || "pcs" }
+  ];
+}
+
+function getDefaultPortionUnit(stockUnit) {
+  const u = String(stockUnit || "").toLowerCase().trim();
+  if (u === "litre" || u === "liter" || u === "l") return "ml";
+  if (u === "kg" || u === "kilogram" || u === "kilograms") return "g";
+  return stockUnit || "pcs";
+}
 
 export default function RecipeBuilder({ 
   menuItems = [], 
@@ -12,7 +44,14 @@ export default function RecipeBuilder({
   
   // Current recipe ingredients list for selected menu item
   const [currentIngredients, setCurrentIngredients] = useState(() => {
-    return recipes[menuItems[0]?.id] ? [...recipes[menuItems[0]?.id]] : [];
+    const list = recipes[menuItems[0]?.id] ? [...recipes[menuItems[0]?.id]] : [];
+    return list.map(item => {
+      const inv = inventory.find(i => i.id === item.ingredientId);
+      return {
+        ...item,
+        unit: item.unit || getDefaultPortionUnit(inv?.unit)
+      };
+    });
   });
   
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -21,24 +60,45 @@ export default function RecipeBuilder({
 
   const handleSelectMenu = (id) => {
     setSelectedMenuId(id);
-    setCurrentIngredients(recipes[id] ? [...recipes[id]] : []);
+    const list = recipes[id] ? [...recipes[id]] : [];
+    setCurrentIngredients(list.map(item => {
+      const inv = inventory.find(i => i.id === item.ingredientId);
+      return {
+        ...item,
+        unit: item.unit || getDefaultPortionUnit(inv?.unit)
+      };
+    }));
     setSavedSuccess(false);
   };
 
   const handleAddIngredientRow = () => {
     if (inventory.length === 0) return;
+    const firstInv = inventory[0];
     setCurrentIngredients([
       ...currentIngredients,
-      { ingredientId: inventory[0].id, qty: 1 }
+      { 
+        ingredientId: firstInv.id, 
+        qty: getDefaultPortionUnit(firstInv.unit) === "ml" ? 150 : (getDefaultPortionUnit(firstInv.unit) === "g" ? 10 : 1),
+        unit: getDefaultPortionUnit(firstInv.unit)
+      }
     ]);
   };
 
   const handleUpdateRow = (index, field, value) => {
     const next = [...currentIngredients];
-    next[index] = {
-      ...next[index],
-      [field]: value
-    };
+    if (field === "ingredientId") {
+      const newInv = inventory.find(i => i.id === value);
+      next[index] = {
+        ...next[index],
+        ingredientId: value,
+        unit: getDefaultPortionUnit(newInv?.unit)
+      };
+    } else {
+      next[index] = {
+        ...next[index],
+        [field]: value
+      };
+    }
     setCurrentIngredients(next);
   };
 
@@ -50,7 +110,14 @@ export default function RecipeBuilder({
     if (!selectedMenuId) return;
     // Filter out rows with invalid/0 qty and cast qty to Number
     const cleanIngredients = currentIngredients
-      .map((r) => ({ ...r, qty: Math.max(0.001, Number(r.qty) || 0) }))
+      .map((r) => {
+        const inv = inventory.find(i => i.id === r.ingredientId);
+        return {
+          ...r,
+          qty: Math.max(0.001, Number(r.qty) || 0),
+          unit: r.unit || getDefaultPortionUnit(inv?.unit)
+        };
+      })
       .filter((r) => r.qty > 0 && r.ingredientId);
     onSaveRecipe(selectedMenuId, cleanIngredients);
     setSavedSuccess(true);
@@ -126,6 +193,8 @@ export default function RecipeBuilder({
             <div className="space-y-3">
               {currentIngredients.map((row, idx) => {
                 const matchedInv = inventory.find(i => i.id === row.ingredientId);
+                const allowedUnits = getPortionUnitsForStockUnit(matchedInv?.unit);
+                const activeUnit = row.unit || getDefaultPortionUnit(matchedInv?.unit);
 
                 return (
                   <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-stone-950 p-3 rounded-xl border border-stone-800">
@@ -143,9 +212,9 @@ export default function RecipeBuilder({
                       </select>
                     </div>
 
-                    <div className="w-full sm:w-36">
+                    <div className="w-full sm:w-28">
                       <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">
-                        Qty per Portion ({matchedInv?.unit || "units"})
+                        Qty per Portion
                       </label>
                       <input
                         type="number"
@@ -156,6 +225,21 @@ export default function RecipeBuilder({
                         onChange={(e) => handleUpdateRow(idx, "qty", e.target.value)}
                         className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-stone-100 focus:outline-none focus:border-amber-500"
                       />
+                    </div>
+
+                    <div className="w-full sm:w-24">
+                      <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">
+                        Unit
+                      </label>
+                      <select
+                        value={activeUnit}
+                        onChange={(e) => handleUpdateRow(idx, "unit", e.target.value)}
+                        className="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-medium focus:outline-none focus:border-amber-500"
+                      >
+                        {allowedUnits.map(u => (
+                          <option key={u.value} value={u.value}>{u.label}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="pt-2 sm:pt-4 flex justify-end">
@@ -186,14 +270,18 @@ export default function RecipeBuilder({
                 const matched = inventory.find((i) => i.id === row.ingredientId);
                 if (!matched) return null;
                 const portionQty = Number(row.qty) || 0;
+                const deductionInStockUnit = convertRecipeUnitToStockUnit(portionQty, row.unit, matched.unit);
                 const currentStock = Number(matched.currentStock) || 0;
-                const afterStock = Math.max(0, Math.round((currentStock - portionQty) * 1000) / 1000);
+                const afterStock = Math.max(0, Math.round((currentStock - deductionInStockUnit) * 1000) / 1000);
 
                 return (
                   <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-stone-900 border border-stone-800/80">
                     <span className="font-medium text-stone-200">{matched.name}</span>
                     <span className="font-mono text-[11px]">
-                      <span className="text-rose-400 font-bold">-{portionQty} {matched.unit}</span>{" "}
+                      <span className="text-rose-400 font-bold">
+                        -{portionQty} {row.unit || matched.unit}
+                        {row.unit && row.unit !== matched.unit ? ` (${deductionInStockUnit} ${matched.unit})` : ""}
+                      </span>{" "}
                       <span className="text-stone-500">({currentStock} → {afterStock} {matched.unit})</span>
                     </span>
                   </div>

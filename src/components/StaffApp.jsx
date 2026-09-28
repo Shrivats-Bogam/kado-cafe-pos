@@ -106,40 +106,57 @@ export default function StaffApp() {
           authUnsub = subscription;
         }
 
-        // 2. Initialize Auth Session on Boot
-        const authData = await initializeAuthSession(supabase);
-        if (authData && authData.user) {
-          setCloudSession(authData);
-          const trustedUser = {
-            id: authData.user.id,
-            email: authData.user.email,
-            name: authData.member?.name || authData.user.email?.split("@")[0] || "User",
-            role: authData.role,
-            organization_id: authData.organization_id,
-            isCloud: true,
-            active: true,
-          };
-          // If a local employee PIN session was persisted, verify it
-          const localSess = loadSession();
-          if (localSess && !localSess.isCloud) {
-            setCurrentUser(localSess);
-          } else {
-            setCurrentUser(trustedUser);
-          }
-        } else {
-          setCloudSession(null);
-          setCurrentUser(null);
-          clearSession();
-        }
-
-        // 3. Load Application State
+        // 2. Load Application State first so employee roster is immediately available
         const json = await getState();
         const next = json ? { ...defaultState(), ...JSON.parse(json) } : defaultState();
 
         // Snapshot current kitchen statuses so we don't fire a toast for already-existing orders
         prevKitchenStatuses.current = snapshotStatuses(next);
-
         setStateRaw(next);
+
+        // 3. Initialize Auth Session on Boot
+        const authData = await initializeAuthSession(supabase);
+        if (authData && authData.user) {
+          setCloudSession(authData);
+
+          const empRoster = next.employees || [];
+          const matchedEmp = empRoster.find(e => 
+            (e.email && e.email.toLowerCase().trim() === authData.user.email?.toLowerCase().trim()) ||
+            (authData.role === "Owner" && e.role === "Owner")
+          );
+
+          // If an employee session was persisted, verify it against the roster
+          const localSess = loadSession();
+          if (localSess && (localSess.id || localSess.pin)) {
+            const activeEmp = empRoster.find(e => (localSess.id && e.id === localSess.id) || (localSess.pin && e.pin === localSess.pin));
+            if (activeEmp && activeEmp.status !== "disabled" && activeEmp.status !== "Inactive") {
+              setCurrentUser({
+                id: activeEmp.id,
+                name: activeEmp.name,
+                role: activeEmp.role,
+                pin: activeEmp.pin,
+                status: activeEmp.status,
+                isCloud: true,
+                organization_id: authData.organization_id || "00000000-0000-0000-0000-000000000001",
+              });
+            } else {
+              setCurrentUser(null);
+              clearSession();
+            }
+          } else {
+            // Fresh boot or locked terminal: stay locked on PIN selection screen with cloud active
+            setCurrentUser(null);
+          }
+        } else {
+          setCloudSession(null);
+          const localSess = loadSession();
+          if (localSess && !isCloudEnabled) {
+            setCurrentUser(localSess);
+          } else {
+            setCurrentUser(null);
+            clearSession();
+          }
+        }
       } catch (err) {
         console.error("Kado Cafe: failed to load state", err);
         setStateRaw(defaultState());
@@ -242,19 +259,24 @@ export default function StaffApp() {
   useEffect(() => {
     if (currentUser && state) {
       // Re-verify currentUser against authoritative state.employees
-      const emp = (state.employees || []).find(e => (e.id && e.id === currentUser.id) || (e.pin && e.pin === currentUser.pin));
+      const emp = (state.employees || []).find(e => 
+        (e.id && e.id === currentUser.id) || 
+        (e.pin && e.pin === currentUser.pin) ||
+        (currentUser.email && e.email && e.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
+      );
       if (emp && (emp.role !== currentUser.role || emp.name !== currentUser.name || emp.pin !== currentUser.pin)) {
         if (emp.status === "disabled" || emp.status === "Inactive") {
           setCurrentUser(null);
           return;
         }
-        setCurrentUser({
+        setCurrentUser(prev => ({
+          ...prev,
           id: emp.id,
           name: emp.name,
           role: emp.role,
           pin: emp.pin,
           status: emp.status
-        });
+        }));
       }
 
       const allowed = ROLE_TABS[currentUser.role] || ROLE_TABS.Owner;
@@ -322,13 +344,21 @@ export default function StaffApp() {
       throw new Error("Account is disabled or inactive.");
     }
 
+    const empRoster = state?.employees || [];
+    const matchedEmp = empRoster.find(e => 
+      (e.email && e.email.toLowerCase().trim() === session.user.email?.toLowerCase().trim()) ||
+      (session.role === "Owner" && e.role === "Owner")
+    );
+
     const authenticatedCloudUser = {
-      id: session.user.id,
-      name: session.member?.name || session.user.email?.split("@")[0] || "Cloud User",
-      role: session.role,
+      id: matchedEmp?.id || session.user.id,
+      name: matchedEmp?.name || (session.member?.name && session.member.name !== "Alex Morgan" ? session.member.name : session.user.email?.split("@")[0] || "Owner"),
+      role: matchedEmp?.role || session.role,
+      pin: matchedEmp?.pin || "1234",
       email: session.user.email,
-      organization_id: session.organization_id,
+      organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
       isCloud: true,
+      active: true,
     };
 
     setCloudSession(session);
@@ -344,12 +374,26 @@ export default function StaffApp() {
   };
 
   if (!currentUser) {
+    const cloudDisplayName = (() => {
+      if (!cloudSession?.user) return "";
+      const empRoster = state?.employees || [];
+      const emp = empRoster.find(e => 
+        (e.email && e.email.toLowerCase().trim() === cloudSession.user.email?.toLowerCase().trim()) ||
+        (cloudSession.role === "Owner" && e.role === "Owner")
+      );
+      if (emp?.name) return `${emp.name} (${emp.role})`;
+      if (cloudSession.member?.name && cloudSession.member.name !== "Alex Morgan") {
+        return `${cloudSession.member.name} (${cloudSession.role || "Member"})`;
+      }
+      return cloudSession.user.email || "Authenticated";
+    })();
+
     return (
       <>
         <LoginScreen
           users={loginUsers}
           hasCloudSession={Boolean(cloudSession?.user)}
-          cloudUser={cloudSession?.member?.name || cloudSession?.user?.email}
+          cloudUser={cloudDisplayName}
           onLogin={(u) => {
             // Authoritative employee lookup from state.employees
             const emp = (state.employees || []).find(e => (e.id && e.id === u.id) || (e.pin && e.pin === u.pin));
@@ -366,14 +410,14 @@ export default function StaffApp() {
               pin: emp.pin,
               status: emp.status,
               isCloud: true,
-              organization_id: cloudSession?.organization_id || cloudSession?.membership?.organization_id || "00000000-0000-0000-0000-000000000001",
+              organization_id: cloudSession?.organization_id || "00000000-0000-0000-0000-000000000001",
             } : { ...u, isCloud: true };
 
             setCurrentUser(authenticatedUser);
             // Record login activity
             update((s) => actions.recordActivityLog(s, {
               employeeName: authenticatedUser.name,
-              action: "Logged into POS via PIN",
+              action: `Staff shift active: ${authenticatedUser.name} (${authenticatedUser.role})`,
               module: "Auth"
             }));
           }}
@@ -560,9 +604,13 @@ export default function StaffApp() {
             className="flex items-center justify-between rounded-xl px-3 py-2 text-sm text-stone-300 bg-stone-900 border border-stone-800 hover:border-amber-500/50 transition cursor-pointer"
           >
             <span className="flex items-center gap-2 truncate">
-              <Lock size={15} className="text-amber-400" /> {currentUser.name}
+              <Lock size={15} className="text-amber-400 shrink-0" />
+              <span className="font-medium text-stone-200 truncate">{currentUser.name}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0 font-medium">
+                {currentUser.role}
+              </span>
             </span>
-            <span className="text-[10px] text-stone-500 uppercase font-semibold">Lock</span>
+            <span className="text-[10px] text-stone-500 uppercase font-semibold shrink-0">Lock</span>
           </button>
           <button
             onClick={logout}

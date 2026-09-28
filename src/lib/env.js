@@ -1,8 +1,11 @@
 // env.js — Environment configuration & E2E account isolation guard
 
+const processEnv = typeof process !== "undefined" && process.env ? process.env : {};
 const windowEnv = (typeof window !== "undefined" && (window.__KADO_APP_ENV || (window.location && window.location.search.includes("env=e2e")))) ? "e2e" : null;
 const metaEnv = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : {};
 export const APP_ENV =
+  processEnv.VITE_APP_ENV ||
+  processEnv.APP_ENV ||
   metaEnv.VITE_APP_ENV ||
   windowEnv ||
   (metaEnv.MODE === "production" ? "production" : "development");
