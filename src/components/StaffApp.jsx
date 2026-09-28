@@ -326,11 +326,12 @@ export default function StaffApp() {
     if (currentUser && state) {
       // Re-verify currentUser against authoritative state.employees
       const emp = (state.employees || []).find(e => 
-        (e.id && e.id === currentUser.id) || 
-        (e.pin && e.pin === currentUser.pin) ||
-        (currentUser.email && e.email && e.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
+        (e.id && String(e.id) === String(currentUser.id)) || 
+        (currentUser.email && e.email && e.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
+        (currentUser.role === "Owner" && e.role === "Owner") ||
+        (e.pin && String(e.pin).trim() === String(currentUser.pin).trim())
       );
-      if (emp && (emp.role !== currentUser.role || emp.name !== currentUser.name || emp.pin !== currentUser.pin)) {
+      if (emp && (emp.role !== currentUser.role || emp.name !== currentUser.name || String(emp.pin).trim() !== String(currentUser.pin).trim())) {
         if (emp.status === "disabled" || emp.status === "Inactive") {
           setCurrentUser(null);
           return;
@@ -340,7 +341,8 @@ export default function StaffApp() {
           id: emp.id,
           name: emp.name,
           role: emp.role,
-          pin: emp.pin,
+          pin: String(emp.pin).trim(),
+          email: emp.email || prev?.email,
           status: emp.status
         }));
       }
@@ -364,7 +366,19 @@ export default function StaffApp() {
   // `update` applies a pure action to the current state. Each action lives in
   // src/state/actions.js so business rules are testable and reusable outside
   // the React tree. The signatures passed to child views are unchanged.
-  const update = (apply) => setStateRaw((prev) => apply(prev));
+  const update = (apply) => {
+    setStateRaw((prev) => {
+      try {
+        return apply(prev);
+      } catch (err) {
+        console.warn("[kado-cafe] Action execution error:", err.message);
+        setTimeout(() => {
+          toaster.push(err.message || "Failed to update state", "warn");
+        }, 0);
+        return prev;
+      }
+    });
+  };
   if (typeof window !== "undefined") {
     window.__kadoUpdate = update;
     window.__kadoActions = actions;
@@ -384,6 +398,7 @@ export default function StaffApp() {
         role: e.role,
         pin: e.pin,
         status: e.status,
+        email: e.email,
         active: true
       }));
 

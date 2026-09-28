@@ -29,6 +29,23 @@ export default function EmployeesView({ state, dispatch, currentUser }) {
 
   const handleSaveEmployee = async (empData) => {
     try {
+      // 1. Client-side duplicate PIN validation with friendly error BEFORE closing modal
+      if (empData.pin) {
+        const cleanPin = String(empData.pin).trim();
+        const conflict = employees.find(e => {
+          const isSelf = 
+            (empData.id && String(e.id) === String(empData.id)) ||
+            (empData.member_id && String(e.id) === String(empData.member_id)) ||
+            (empData.employeeId && e.employeeId && e.employeeId === empData.employeeId) ||
+            (empData.email && e.email && e.email.toLowerCase().trim() === empData.email.toLowerCase().trim());
+          if (isSelf) return false;
+          return String(e.pin).trim() === cleanPin && e.status !== "disabled" && e.status !== "Inactive";
+        });
+        if (conflict) {
+          throw new Error(`PIN "${cleanPin}" is already assigned to ${conflict.name || "another employee"}. Please choose a different PIN.`);
+        }
+      }
+
       const supabase = getSupabaseClient();
       let cloudResult = null;
 

@@ -18,10 +18,10 @@ export function EmployeeDirectory({ employees, onAdd, onEdit, onToggleStatus, is
 
   const filtered = employees.filter((emp) => {
     const matchesSearch =
-      emp.name.toLowerCase().includes(search.toLowerCase()) ||
-      emp.employeeId.toLowerCase().includes(search.toLowerCase()) ||
-      (emp.phone && emp.phone.includes(search));
-    const matchesRole = roleFilter === "all" || emp.role.toLowerCase() === roleFilter.toLowerCase();
+      (emp.name ? emp.name.toLowerCase().includes(search.toLowerCase()) : false) ||
+      (emp.employeeId ? emp.employeeId.toLowerCase().includes(search.toLowerCase()) : false) ||
+      (emp.phone ? emp.phone.includes(search) : false);
+    const matchesRole = roleFilter === "all" || (emp.role && emp.role.toLowerCase() === roleFilter.toLowerCase());
     return matchesSearch && matchesRole;
   });
 
@@ -86,15 +86,15 @@ export function EmployeeDirectory({ employees, onAdd, onEdit, onToggleStatus, is
                   <td className="py-3 px-2">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center font-bold text-amber-500 text-xs">
-                        {emp.name.split(" ").map((n) => n[0]).join("")}
+                        {emp.name ? emp.name.split(" ").filter(Boolean).map((n) => n[0]).join("") : "E"}
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-bold text-stone-100">{emp.name}</span>
+                        <span className="font-bold text-stone-100">{emp.name || "Unnamed"}</span>
                         <span className="text-[10px] text-stone-500">{emp.email || emp.phone || "No contact"}</span>
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 px-2 font-mono text-stone-400">{emp.employeeId}</td>
+                  <td className="py-3 px-2 font-mono text-stone-400">{emp.employeeId || "—"}</td>
                   <td className="py-3 px-2">
                     <Pill tone={ROLE_TONES[emp.role] || "stone"}>{emp.role}</Pill>
                   </td>

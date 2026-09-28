@@ -1160,35 +1160,62 @@ export function addEmployee(state, employeeData) {
 
 export function editEmployee(state, employeeData) {
   const employees = state.employees || [];
-  const oldEmp = employees.find(e => e.id === employeeData.id);
+  const oldEmp = employees.find(e => 
+    (employeeData.id && String(e.id) === String(employeeData.id)) ||
+    (employeeData.email && e.email && e.email.toLowerCase().trim() === employeeData.email.toLowerCase().trim()) ||
+    (employeeData.role === "Owner" && e.role === "Owner")
+  );
   
   if (employeeData.pin) {
     const cleanPin = String(employeeData.pin).trim();
-    const existing = employees.find(
-      e => String(e.pin).trim() === cleanPin &&
-           e.id !== employeeData.id &&
-           e.status !== "disabled" &&
-           e.status !== "Inactive"
-    );
+    const existing = employees.find(e => {
+      // Exclude self: by id, or email, or employeeId, or oldEmp match
+      const isSelf = 
+        (employeeData.id && String(e.id) === String(employeeData.id)) ||
+        (employeeData.member_id && String(e.id) === String(employeeData.member_id)) ||
+        (employeeData.employeeId && e.employeeId && e.employeeId === employeeData.employeeId) ||
+        (employeeData.email && e.email && e.email.toLowerCase().trim() === employeeData.email.toLowerCase().trim()) ||
+        (oldEmp && (String(e.id) === String(oldEmp.id) || (e.email && oldEmp.email && e.email.toLowerCase().trim() === oldEmp.email.toLowerCase().trim())));
+
+      if (isSelf) return false;
+
+      return String(e.pin).trim() === cleanPin &&
+             e.status !== "disabled" &&
+             e.status !== "Inactive";
+    });
+
     if (existing) {
-      throw new Error("PIN is already assigned to another active employee.");
+      throw new Error(`PIN "${cleanPin}" is already assigned to ${existing.name || "another employee"}.`);
     }
   }
 
   const updatedEmployees = employees.map(e => {
-    if (e.id === employeeData.id) {
-      return { ...e, ...employeeData, pin: String(employeeData.pin || e.pin).trim() };
+    const isTarget = 
+      (employeeData.id && String(e.id) === String(employeeData.id)) ||
+      (oldEmp && String(e.id) === String(oldEmp.id)) ||
+      (employeeData.email && e.email && e.email.toLowerCase().trim() === employeeData.email.toLowerCase().trim());
+
+    if (isTarget) {
+      return { 
+        ...e, 
+        ...employeeData, 
+        id: e.id || employeeData.id,
+        employeeId: e.employeeId || employeeData.employeeId || (e.id ? `EMP-${String(e.id).replace(/\D/g, '') || '101'}` : "EMP-101"),
+        pin: String(employeeData.pin || e.pin).trim() 
+      };
     }
     return e;
   });
 
-  // Sync state.users comprehensively (match by id, name, pin, or legacy role/pin pair)
+  // Sync state.users comprehensively (match by id, name, or role if Owner)
   let updatedUsers = false;
   const nextUsers = (state.users || []).map(u => {
-    const isMatch = u.id === employeeData.id ||
-                    (oldEmp && (u.name === oldEmp.name || u.pin === oldEmp.pin)) ||
-                    (employeeData.name && u.name === employeeData.name) ||
-                    (employeeData.pin && u.pin === String(employeeData.pin).trim());
+    const isMatch = 
+      (employeeData.id && String(u.id) === String(employeeData.id)) ||
+      (oldEmp && (u.name === oldEmp.name || String(u.id) === String(oldEmp.id))) ||
+      (employeeData.name && u.name === employeeData.name) ||
+      (employeeData.role === "Owner" && u.role === "Owner");
+
     if (isMatch) {
       updatedUsers = true;
       return {
@@ -1204,9 +1231,9 @@ export function editEmployee(state, employeeData) {
     return u;
   });
 
-  if (!updatedUsers && employeeData.id) {
+  if (!updatedUsers && (employeeData.id || oldEmp)) {
     nextUsers.push({
-      id: employeeData.id,
+      id: employeeData.id || oldEmp?.id || "u_emp",
       name: employeeData.name || (oldEmp ? oldEmp.name : "Employee"),
       pin: String(employeeData.pin || (oldEmp ? oldEmp.pin : "0000")).trim(),
       role: employeeData.role || (oldEmp ? oldEmp.role : "Staff"),
