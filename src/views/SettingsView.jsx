@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Settings, Building2, Receipt, Coffee, ChefHat, Menu as MenuIcon, Package,
   Users, ShieldCheck, Bot, Database, AlertTriangle, Save, RefreshCw, Check,
-  Download, Trash2, ArrowRight, ShieldAlert, AlertCircle
+  Download, Trash2, ArrowRight, ShieldAlert, AlertCircle, Archive
 } from "lucide-react";
 import { Card, PrimaryButton, SecondaryButton, Pill } from "../components/ui.jsx";
+import { useToaster } from "../components/Toaster.jsx";
 import { defaultSettings, ROLE_LABELS } from "../data/defaults.js";
 import { getAISettings, saveAISettings, PROVIDERS, testAIConnection } from "../lib/ai.js";
 import {
@@ -39,6 +40,7 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
   const [activeSection, setActiveSection] = useState("general");
   const [saveStatus, setSaveStatus] = useState(null); // null | "saving" | "saved" | "error"
   const [validationError, setValidationError] = useState("");
+  const toaster = useToaster();
 
   // AI settings local state
   const [aiSettings, setAiSettings] = useState(getAISettings);
@@ -129,6 +131,50 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleOptimizeState = () => {
+    const ordersCount = (state.orderHistory || []).length;
+    const logsCount = (state.inventoryLogs || []).length;
+    if (ordersCount <= 200 && logsCount <= 200) {
+      toaster.push("State is already lean and optimized (< 200 orders in memory).", "info");
+      return;
+    }
+    const olderOrders = (state.orderHistory || []).slice(200);
+    if (typeof localStorage !== "undefined" && olderOrders.length > 0) {
+      try {
+        const existingArchive = JSON.parse(localStorage.getItem("kado-cafe-archive") || "[]");
+        localStorage.setItem("kado-cafe-archive", JSON.stringify([...olderOrders, ...existingArchive].slice(0, 5000)));
+      } catch (err) {
+        console.warn("Failed to archive older orders:", err);
+      }
+    }
+    if (dispatch) {
+      dispatch("archiveHistoricalData", { keepOrders: 200, keepLogs: 200, keepActivity: 50 });
+      toaster.push(`Database optimized! Archived ${ordersCount - 200} older orders. Realtime payload minimized.`, "success");
+    }
+  };
+
+  const handleExportArchive = () => {
+    let archiveData = [];
+    if (typeof localStorage !== "undefined") {
+      try {
+        archiveData = JSON.parse(localStorage.getItem("kado-cafe-archive") || "[]");
+      } catch { /* empty */ }
+    }
+    if (archiveData.length === 0) {
+      toaster.push("No archived historical orders found in local storage.", "info");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(archiveData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `kado-cafe-archived-orders-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toaster.push(`Exported ${archiveData.length} archived orders.`, "success");
   };
 
   const handleTestAI = async () => {
@@ -790,6 +836,57 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
                     onClick={() => setShowRestoreModal(true)}
                   >
                     <RefreshCw size={15} className="text-amber-500" /> Restore Backup
+                  </SecondaryButton>
+                </div>
+              </div>
+
+              {/* Database Optimization & Realtime Payload Archival */}
+              <div className="p-3 rounded-xl bg-stone-950 border border-stone-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Archive size={16} className="text-amber-500" />
+                    <span className="font-bold text-stone-200 uppercase tracking-wide">Realtime Payload Optimization & Archival</span>
+                  </div>
+                  <Pill tone={(state.orderHistory || []).length > 250 ? "amber" : "emerald"}>
+                    {(state.orderHistory || []).length > 250 ? "Optimization Recommended" : "Optimal Payload"}
+                  </Pill>
+                </div>
+                <p className="text-[11px] text-stone-400">
+                  Automatically bounds in-memory orders and audit logs to keep Supabase realtime broadcasts nimble (&lt;150KB) and prevent terminal memory bloat over months of continuous operation.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Orders in Memory</span>
+                    <strong className="text-stone-100 text-sm">{(state.orderHistory || []).length}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Archived Orders</span>
+                    <strong className="text-amber-400 text-sm">{state.archivedOrdersCount || 0}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Inventory Logs</span>
+                    <strong className="text-stone-100 text-sm">{(state.inventoryLogs || []).length}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-stone-900 border border-stone-800">
+                    <span className="text-stone-500 block">Last Archived</span>
+                    <strong className="text-stone-300 text-xs">
+                      {state.lastArchivedAt ? new Date(state.lastArchivedAt).toLocaleDateString() : "Never"}
+                    </strong>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-stone-800/60">
+                  <PrimaryButton
+                    data-testid="optimize-db-btn"
+                    disabled={!isOwner}
+                    onClick={handleOptimizeState}
+                  >
+                    <Archive size={15} /> Optimize & Archive Database
+                  </PrimaryButton>
+                  <SecondaryButton
+                    data-testid="export-archive-btn"
+                    onClick={handleExportArchive}
+                  >
+                    <Download size={15} /> Export Archived Orders (.JSON)
                   </SecondaryButton>
                 </div>
               </div>

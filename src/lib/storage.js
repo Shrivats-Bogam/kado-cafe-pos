@@ -279,6 +279,34 @@ export function setState(jsonString) {
   }
 
   const rawObj = JSON.parse(jsonString);
+
+  // Automatic State Archival: keep live state payload bounded and nimble (<200KB)
+  if ((rawObj.orderHistory && rawObj.orderHistory.length > 400) || (rawObj.inventoryLogs && rawObj.inventoryLogs.length > 400)) {
+    console.info("[kado-cafe] Auto-archiving historical orders and logs to bound realtime payload size...");
+    const keepOrders = 250;
+    const keepLogs = 250;
+    const keepActivity = 80;
+    
+    // Save archived slice to local archival key so historical records are not permanently destroyed
+    if (typeof localStorage !== "undefined") {
+      try {
+        const existingArchiveRaw = localStorage.getItem("kado-cafe-archive") || "[]";
+        const existingArchive = JSON.parse(existingArchiveRaw);
+        const olderOrders = (rawObj.orderHistory || []).slice(keepOrders);
+        const mergedArchive = [...olderOrders, ...existingArchive].slice(0, 5000); // cap local archive at 5000
+        localStorage.setItem("kado-cafe-archive", JSON.stringify(mergedArchive));
+      } catch (err) {
+        console.warn("[kado-cafe] Failed to persist archive slice:", err);
+      }
+    }
+
+    rawObj.archivedOrdersCount = (rawObj.archivedOrdersCount || 0) + Math.max(0, (rawObj.orderHistory?.length || 0) - keepOrders);
+    rawObj.lastArchivedAt = new Date().toISOString();
+    rawObj.orderHistory = (rawObj.orderHistory || []).slice(0, keepOrders);
+    rawObj.inventoryLogs = (rawObj.inventoryLogs || []).slice(0, keepLogs);
+    rawObj.activityLogs = (rawObj.activityLogs || []).slice(0, keepActivity);
+  }
+
   const nextVersion = Number(rawObj.state_version || 0) + 1;
   const versionedObj = {
     ...rawObj,
