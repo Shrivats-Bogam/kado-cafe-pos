@@ -682,6 +682,52 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
                   </div>
                 </div>
               </div>
+
+              {/* Loyalty Points Expiry & Auto-Promotion Policy */}
+              <div className="border-t border-stone-800 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-stone-400 font-semibold">Loyalty Points Expiry Policy</label>
+                  <label className="flex items-center gap-2 cursor-pointer text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={form.loyaltyPointsExpiryEnabled ?? true}
+                      onChange={(e) => handleChange("loyaltyPointsExpiryEnabled", e.target.checked)}
+                      disabled={!isOwner}
+                      className="rounded accent-amber-500 cursor-pointer"
+                    />
+                    <span>Auto-Expire Stale Points</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className="text-stone-400 block mb-1">Inactivity Expiry Window (Days)</label>
+                    <input
+                      type="number"
+                      value={form.loyaltyPointsExpiryDays ?? 365}
+                      onChange={(e) => handleChange("loyaltyPointsExpiryDays", Number(e.target.value))}
+                      disabled={!isOwner || form.loyaltyPointsExpiryEnabled === false}
+                      className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 text-xs focus:outline-none focus:border-amber-500 font-mono disabled:opacity-50"
+                    />
+                    <span className="text-[10px] text-stone-500 block mt-0.5">Points expire if customer has no visits for this period (Default: 365 days)</span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (dispatch) {
+                          dispatch("recalculateCustomerLoyalty", { staffName: currentUser?.name });
+                          setSuccessMsg("Loyalty audit executed: Customer tiers promoted & inactive points expired.");
+                          setTimeout(() => setSuccessMsg(""), 3500);
+                        }
+                      }}
+                      disabled={!isOwner}
+                      className="w-full py-2.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 min-h-[38px]"
+                    >
+                      <RefreshCw size={13} /> Run Tier Auto-Promotion & Audit
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

@@ -3,7 +3,7 @@ import { X, Phone, Mail, MapPin, Gift, History, Heart, Edit3, Repeat, Award, Che
 import { Card, PrimaryButton } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
 import { useMenuIndex } from "../lib/menuIndex.js";
-import { topFavoriteItems, daysUntilBirthday } from "../lib/loyalty.js";
+import { topFavoriteItems, daysUntilBirthday, calculatePointsExpiry } from "../lib/loyalty.js";
 
 export default function CustomerProfileModal({ 
   customer, 
@@ -88,6 +88,7 @@ export default function CustomerProfileModal({
   }
 
   const dUntil = daysUntilBirthday(customer.birthday);
+  const expiryInfo = useMemo(() => calculatePointsExpiry(customer), [customer]);
 
   return (
     <div
@@ -142,6 +143,16 @@ export default function CustomerProfileModal({
               <span className="text-base font-bold text-purple-400 font-mono flex items-center gap-1">
                 <Gift size={13} /> {customer.points || 0} pts
               </span>
+              {expiryInfo.daysRemaining !== null && customer.points > 0 && (
+                <span className={`text-[10px] font-mono block ${expiryInfo.daysRemaining <= 30 ? "text-amber-400 font-semibold" : "text-stone-500"}`}>
+                  {expiryInfo.daysRemaining <= 30 ? `⚠️ Expires: ${expiryInfo.daysRemaining}d` : `Valid: ${expiryInfo.daysRemaining}d`}
+                </span>
+              )}
+              {customer.expiredPoints > 0 && (
+                <span className="text-[9px] text-stone-500 block truncate">
+                  ({customer.expiredPoints} pts expired)
+                </span>
+              )}
             </div>
             <div>
               <span className="text-stone-500 text-[10px] uppercase font-bold block">Last Visit</span>
@@ -150,6 +161,16 @@ export default function CustomerProfileModal({
               </span>
             </div>
           </div>
+
+          {/* Points Expiry Alert */}
+          {expiryInfo.daysRemaining !== null && expiryInfo.daysRemaining <= 30 && customer.points > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-xl text-xs text-amber-300 flex items-center gap-2 font-medium">
+              <Gift size={16} className="text-amber-400 shrink-0" />
+              <span>
+                Loyalty Warning: {customer.points} points will expire in {expiryInfo.daysRemaining} day{expiryInfo.daysRemaining !== 1 ? "s" : ""} due to inactivity.
+              </span>
+            </div>
+          )}
 
           {/* Birthday / Celebration Alert */}
           {dUntil !== null && dUntil <= 14 && (

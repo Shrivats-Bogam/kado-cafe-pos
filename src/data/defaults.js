@@ -268,6 +268,8 @@ export function defaultSettings() {
     silverThreshold: 0,
     goldThreshold: 10000,
     platinumThreshold: 50000,
+    loyaltyPointsExpiryDays: 365,
+    loyaltyPointsExpiryEnabled: true,
 
     // Data & Export
     dataExportFormat: "csv",

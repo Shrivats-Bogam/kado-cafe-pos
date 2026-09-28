@@ -13,7 +13,13 @@
 // pattern the inline code used. Function behaviour is otherwise identical.
 
 import { orderTotal } from "../lib/currency.js";
-import { applyLoyalty } from "../lib/loyalty.js";
+import { 
+  applyLoyalty, 
+  evaluateCustomerTier, 
+  autoPromoteCustomerTiers, 
+  expireInactiveCustomerPoints, 
+  calculateMembershipTier 
+} from "../lib/loyalty.js";
 import { makeId } from "../lib/id.js";
 
 // --- Tables ---------------------------------------------------------------
@@ -601,26 +607,114 @@ export function reorderCategories(state, newCategories) {
 }
 
 export function addCustomer(state, customer) {
+  const prepared = evaluateCustomerTier(
+    {
+      ...customer,
+      points: Number(customer.points) || 0,
+      lifetimeSpend: Number(customer.lifetimeSpend) || 0,
+      totalOrders: Number(customer.totalOrders) || 0,
+      totalVisits: Number(customer.totalVisits || customer.totalOrders) || 0,
+      createdAt: customer.createdAt || new Date().toISOString(),
+      lastVisit: customer.lastVisit || new Date().toISOString(),
+    },
+    state.settings
+  );
+
   // Prevent duplicate customers by phone
-  const existing = (state.customers || []).find(c => c.phone === customer.phone);
+  const existing = (state.customers || []).find((c) => c.phone && c.phone === prepared.phone);
   if (existing) {
+    const merged = evaluateCustomerTier(
+      {
+        ...existing,
+        ...prepared,
+        lifetimeSpend: (existing.lifetimeSpend || 0) + (prepared.lifetimeSpend || 0),
+        points: (existing.points || 0) + (prepared.points || 0),
+      },
+      state.settings
+    );
     return {
       ...state,
-      customers: state.customers.map(c => c.id === existing.id ? { ...c, ...customer } : c)
+      customers: state.customers.map((c) => (c.id === existing.id ? merged : c)),
     };
   }
-  return { ...state, customers: [...state.customers, customer] };
+  return { ...state, customers: [...(state.customers || []), prepared] };
 }
 
 export function editCustomer(state, id, patch) {
   return {
     ...state,
-    customers: (state.customers || []).map((c) => (c.id === id ? { ...c, ...patch } : c))
+    customers: (state.customers || []).map((c) => {
+      if (c.id !== id) return c;
+      const merged = { ...c, ...patch };
+      // Auto-evaluate tier if lifetimeSpend is modified or patch doesn't specify membership
+      return evaluateCustomerTier(merged, state.settings);
+    }),
   };
 }
 
 export function deleteCustomer(state, id) {
-  return { ...state, customers: state.customers.filter((c) => c.id !== id) };
+  return { ...state, customers: (state.customers || []).filter((c) => c.id !== id) };
+}
+
+/**
+ * Re-evaluates customer tiers and automatically expires inactive loyalty points.
+ * Emits an activity log if promotions or point expirations occurred.
+ */
+export function recalculateCustomerLoyalty(state, opts = {}) {
+  const settings = state.settings || {};
+  const { customers: promotedList, promotedCount } = autoPromoteCustomerTiers(state.customers || [], settings);
+  const { customers: finalCustomers, totalExpiredPoints, expiredCount } = expireInactiveCustomerPoints(
+    promotedList,
+    settings,
+    opts.now || new Date()
+  );
+
+  const logs = [...(state.activityLogs || [])];
+  if (promotedCount > 0 || expiredCount > 0) {
+    logs.unshift({
+      id: makeId("log"),
+      employeeName: opts.staffName || "System",
+      action: "Loyalty Audit",
+      module: "CRM",
+      details: `Loyalty audit completed: ${promotedCount} customer tier promotion(s), ${totalExpiredPoints} inactive points expired across ${expiredCount} account(s).`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  return {
+    ...state,
+    customers: finalCustomers,
+    activityLogs: logs.slice(0, 100),
+  };
+}
+
+/**
+ * Sweeps the customer pool for loyalty points that have exceeded the inactivity window.
+ */
+export function expireCustomerPoints(state, opts = {}) {
+  const { customers, totalExpiredPoints, expiredCount } = expireInactiveCustomerPoints(
+    state.customers || [],
+    state.settings || {},
+    opts.now || new Date()
+  );
+
+  if (expiredCount === 0) return state;
+
+  const logs = [...(state.activityLogs || [])];
+  logs.unshift({
+    id: makeId("log"),
+    employeeName: opts.staffName || "System",
+    action: "Points Expired",
+    module: "CRM",
+    details: `Auto-expired ${totalExpiredPoints} points for ${expiredCount} inactive customer profile(s).`,
+    timestamp: new Date().toISOString(),
+  });
+
+  return {
+    ...state,
+    customers,
+    activityLogs: logs.slice(0, 100),
+  };
 }
 
 // --- Users / Settings -----------------------------------------------------
