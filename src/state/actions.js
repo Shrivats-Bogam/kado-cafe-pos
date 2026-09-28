@@ -907,9 +907,9 @@ export function addInventoryItem(state, item) {
     name: item.name || "New Product",
     category: item.category || "General",
     unit: item.unit || "pcs",
-    currentStock: Number(item.currentStock) || 0,
-    minStock: Number(item.minStock) || 0,
-    costPrice: Number(item.costPrice) || 0,
+    currentStock: Math.max(0, Number(item.currentStock) || 0),
+    minStock: Math.max(0, Number(item.minStock) || 0),
+    costPrice: Math.max(0, Number(item.costPrice) || 0),
     supplier: item.supplier || "",
     notes: item.notes || "",
   };
@@ -920,9 +920,19 @@ export function addInventoryItem(state, item) {
 }
 
 export function editInventoryItem(state, id, patch) {
+  const sanitizedPatch = { ...patch };
+  if (sanitizedPatch.currentStock !== undefined) {
+    sanitizedPatch.currentStock = Math.max(0, Number(sanitizedPatch.currentStock) || 0);
+  }
+  if (sanitizedPatch.minStock !== undefined) {
+    sanitizedPatch.minStock = Math.max(0, Number(sanitizedPatch.minStock) || 0);
+  }
+  if (sanitizedPatch.costPrice !== undefined) {
+    sanitizedPatch.costPrice = Math.max(0, Number(sanitizedPatch.costPrice) || 0);
+  }
   return {
     ...state,
-    inventory: (state.inventory || []).map((i) => (i.id === id ? { ...i, ...patch } : i))
+    inventory: (state.inventory || []).map((i) => (i.id === id ? { ...i, ...sanitizedPatch } : i))
   };
 }
 
@@ -930,6 +940,49 @@ export function deleteInventoryItem(state, id) {
   return {
     ...state,
     inventory: (state.inventory || []).filter((i) => i.id !== id)
+  };
+}
+
+/**
+ * Checks stock sufficiency for a given list of order items against current inventory.
+ * @param {Array} inventory Current inventory items
+ * @param {Object} recipes Recipe dictionary keyed by menuItemId
+ * @param {Array} items Order items [{ menuItemId, qty, name }]
+ * @returns {{ sufficient: boolean, warnings: Array<{ menuItemId: string, itemName: string, ingredientName: string, needed: number, available: number, unit: string }> }}
+ */
+export function checkInventorySufficiency(inventory = [], recipes = {}, items = []) {
+  const warnings = [];
+  const requiredByIngredient = {};
+
+  (items || []).forEach((item) => {
+    const recipe = recipes ? recipes[item.menuItemId] : null;
+    if (recipe && Array.isArray(recipe)) {
+      recipe.forEach((req) => {
+        const invItem = (inventory || []).find((i) => i.id === req.ingredientId || i.name === req.ingredientName);
+        if (invItem) {
+          const singleInStockUnit = convertRecipeUnitToStockUnit(req.qty, req.unit, invItem.unit);
+          const totalNeeded = singleInStockUnit * (item.qty || 1);
+          requiredByIngredient[invItem.id] = (requiredByIngredient[invItem.id] || 0) + totalNeeded;
+
+          const currentStock = typeof invItem.currentStock === "number" ? invItem.currentStock : (invItem.qty || 0);
+          if (requiredByIngredient[invItem.id] > currentStock) {
+            warnings.push({
+              menuItemId: item.menuItemId,
+              itemName: item.name || "Item",
+              ingredientName: invItem.name,
+              needed: Math.round(requiredByIngredient[invItem.id] * 1000) / 1000,
+              available: currentStock,
+              unit: invItem.unit
+            });
+          }
+        }
+      });
+    }
+  });
+
+  return {
+    sufficient: warnings.length === 0,
+    warnings
   };
 }
 
@@ -945,8 +998,8 @@ export function saveRecipe(state, menuItemId, ingredients = []) {
 
 export function addPurchaseEntry(state, purchaseData) {
   const { ingredientId, qty, cost, supplier, invoiceNo, date, notes } = purchaseData;
-  const qtyNum = Number(qty) || 0;
-  const costNum = Number(cost) || 0;
+  const qtyNum = Math.max(0, Number(qty) || 0);
+  const costNum = Math.max(0, Number(cost) || 0);
 
   let ingredientName = "Item";
   let unit = "pcs";
@@ -1020,7 +1073,7 @@ export function adjustStock(state, adjustmentData) {
       unit = item.unit;
       costPrice = item.costPrice || 0;
       prevStock = item.currentStock || 0;
-      newStock = normalizedType === "ADJUSTMENT" ? qtyNum : Math.max(0, prevStock - qtyNum);
+      newStock = normalizedType === "ADJUSTMENT" ? Math.max(0, qtyNum) : Math.max(0, prevStock - qtyNum);
       return {
         ...item,
         currentStock: Math.round(newStock * 1000) / 1000
@@ -1420,5 +1473,38 @@ export function refundOrder(state, orderId, refundAmount, reason = "Customer ref
     orderHistory: updatedHistory,
     refunds: [...(state.refunds || []), newRefundRecord],
     payments: [...(state.payments || []), refundPaymentRecord]
+  };
+}
+
+/**
+ * Archives and prunes historical orders, inventory logs, and activity logs to keep
+ * the live state payload lightweight (<200KB) and prevent memory/bandwidth bloat.
+ *
+ * @param {object} state Current application state
+ * @param {object} [options] Archival thresholds
+ * @returns {object} Updated state with bounded historical arrays
+ */
+export function archiveHistoricalData(state, options = {}) {
+  const keepOrders = options.keepOrders || 300;
+  const keepLogs = options.keepLogs || 300;
+  const keepActivity = options.keepActivity || 100;
+
+  const currentHistory = state.orderHistory || [];
+  const currentInvLogs = state.inventoryLogs || [];
+  const currentActivity = state.activityLogs || [];
+
+  const prunedHistory = currentHistory.slice(0, keepOrders);
+  const archivedOrders = currentHistory.slice(keepOrders);
+
+  const prunedInvLogs = currentInvLogs.slice(0, keepLogs);
+  const prunedActivity = currentActivity.slice(0, keepActivity);
+
+  return {
+    ...state,
+    orderHistory: prunedHistory,
+    inventoryLogs: prunedInvLogs,
+    activityLogs: prunedActivity,
+    archivedOrdersCount: (state.archivedOrdersCount || 0) + archivedOrders.length,
+    lastArchivedAt: new Date().toISOString()
   };
 }

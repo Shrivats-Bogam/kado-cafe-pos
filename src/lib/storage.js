@@ -373,3 +373,33 @@ export const isCloudEnabled = useSupabase;
 export function getSupabaseClient() {
   return supabase;
 }
+
+/**
+ * Active connection health check to verify database latency & cloud connectivity
+ * @returns {Promise<{ online: boolean, mode: 'cloud'|'local', latencyMs: number, error?: string }>}
+ */
+export async function checkConnectionHealth() {
+  const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+  if (!isOnline) {
+    return { online: false, mode: useSupabase ? "cloud" : "local", latencyMs: 0, error: "Network offline" };
+  }
+  if (!useSupabase || !supabase) {
+    return { online: true, mode: "local", latencyMs: 0 };
+  }
+  const start = Date.now();
+  try {
+    const { error } = await supabase
+      .from("cafe_state")
+      .select("updated_at")
+      .eq("cafe_id", CAFE_ID)
+      .limit(1);
+    const latencyMs = Date.now() - start;
+    if (error) {
+      return { online: false, mode: "cloud", latencyMs, error: error.message };
+    }
+    return { online: true, mode: "cloud", latencyMs };
+  } catch (err) {
+    return { online: false, mode: "cloud", latencyMs: Date.now() - start, error: err.message || "Connection timeout" };
+  }
+}
+

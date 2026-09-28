@@ -1,7 +1,27 @@
-import { useState } from "react";
-import { Coffee, ArrowLeft, Delete, KeyRound, ShieldCheck, ShieldAlert, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Coffee, ArrowLeft, Delete, KeyRound, ShieldCheck, ShieldAlert, Lock, AlertTriangle } from "lucide-react";
 import { Pill, PrimaryButton } from "./ui.jsx";
 import { ROLE_LABELS } from "../data/defaults.js";
+import { verifyPin } from "../lib/pinSecurity.js";
+
+const LOCKOUT_KEY = "kado_pin_rate_limit";
+
+function getStoredLockout() {
+  if (typeof sessionStorage === "undefined") return { attempts: 0, lockedUntil: 0 };
+  try {
+    const raw = sessionStorage.getItem(LOCKOUT_KEY);
+    return raw ? JSON.parse(raw) : { attempts: 0, lockedUntil: 0 };
+  } catch {
+    return { attempts: 0, lockedUntil: 0 };
+  }
+}
+
+function saveStoredLockout(data) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(LOCKOUT_KEY, JSON.stringify(data));
+  } catch {}
+}
 
 export default function LoginScreen({
   users = [],
@@ -18,9 +38,38 @@ export default function LoginScreen({
   const [password, setPassword] = useState("");
   const [submittingCloud, setSubmittingCloud] = useState(false);
 
-  const submitPin = (fullPin) => {
+  // Rate limiting & lockout state
+  const [lockoutRemaining, setLockoutRemaining] = useState(() => {
+    const stored = getStoredLockout();
+    const remaining = Math.max(0, Math.ceil((stored.lockedUntil - Date.now()) / 1000));
+    return remaining;
+  });
+
+  useEffect(() => {
+    if (lockoutRemaining <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          saveStoredLockout({ attempts: 0, lockedUntil: 0 });
+          setError("");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutRemaining]);
+
+  const submitPin = async (fullPin) => {
+    if (lockoutRemaining > 0) return;
+
     const expectedPin = String(pickedUser?.pin || "");
-    if (pickedUser && String(fullPin) === expectedPin) {
+    const isMatch = pickedUser ? await verifyPin(fullPin, expectedPin) : false;
+
+    if (isMatch) {
+      // Successful authentication: reset rate limit tracking
+      saveStoredLockout({ attempts: 0, lockedUntil: 0 });
       if (!hasCloudSession) {
         setError("Cloud login required. Please sign in with your employee email and password to continue.");
         setMode("cloud");
@@ -31,12 +80,38 @@ export default function LoginScreen({
       }
       onLogin(pickedUser);
     } else {
-      setError("Wrong PIN");
+      const stored = getStoredLockout();
+      const nextAttempts = (stored.attempts || 0) + 1;
+      let lockoutSec = 0;
+
+      // Exponential lockout policy:
+      // 3 attempts -> 30s lockout
+      // 4 attempts -> 60s lockout
+      // 5+ attempts -> 180s (3m) lockout
+      if (nextAttempts >= 5) {
+        lockoutSec = 180;
+      } else if (nextAttempts === 4) {
+        lockoutSec = 60;
+      } else if (nextAttempts >= 3) {
+        lockoutSec = 30;
+      }
+
+      if (lockoutSec > 0) {
+        const lockedUntil = Date.now() + lockoutSec * 1000;
+        saveStoredLockout({ attempts: nextAttempts, lockedUntil });
+        setLockoutRemaining(lockoutSec);
+        setError(`Too many failed PIN attempts. Terminal locked for ${lockoutSec}s.`);
+      } else {
+        saveStoredLockout({ attempts: nextAttempts, lockedUntil: 0 });
+        const remainingAttempts = 3 - nextAttempts;
+        setError(`Wrong PIN (${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} remaining before lockout)`);
+      }
       setPin("");
     }
   };
 
   const pressDigit = (d) => {
+    if (lockoutRemaining > 0) return;
     const next = (pin + d).slice(0, 4);
     setPin(next);
     setError("");
@@ -54,6 +129,8 @@ export default function LoginScreen({
     try {
       if (onCloudLogin) {
         await onCloudLogin(email, password);
+        saveStoredLockout({ attempts: 0, lockedUntil: 0 });
+        setLockoutRemaining(0);
       } else {
         setError("Cloud login is currently unavailable. Please use Terminal PIN.");
       }
@@ -190,7 +267,22 @@ export default function LoginScreen({
         ))}
       </div>
 
-      {error && (
+      {lockoutRemaining > 0 ? (
+        <div className="max-w-xs w-full text-center bg-rose-950/40 border border-rose-500/40 p-3.5 rounded-2xl flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+            <Lock size={16} /> Terminal Locked
+          </div>
+          <p className="text-xs text-rose-300">
+            Too many failed attempts. Please wait <span className="font-mono font-bold text-amber-400">{lockoutRemaining}s</span> before retrying.
+          </p>
+          <button
+            onClick={() => { setMode("cloud"); setError(""); }}
+            className="mt-1 text-xs text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
+          >
+            Unlock with Cloud Account (Owner/Manager)
+          </button>
+        </div>
+      ) : error ? (
         <div className="max-w-xs text-center">
           <p className="text-xs text-rose-400 bg-rose-950/40 border border-rose-800/60 p-2.5 rounded-xl">{error}</p>
           {!hasCloudSession && (
@@ -202,15 +294,18 @@ export default function LoginScreen({
             </button>
           )}
         </div>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
           <button
             key={d}
             data-testid={`pin-digit-${d}`}
+            disabled={lockoutRemaining > 0}
             onClick={() => pressDigit(d)}
-            className="rounded-xl py-4 text-lg font-medium bg-stone-900 border border-stone-800 text-stone-100 hover:bg-stone-800 active:bg-stone-700 transition cursor-pointer"
+            className={`rounded-xl py-4 text-lg font-medium bg-stone-900 border border-stone-800 text-stone-100 transition cursor-pointer ${
+              lockoutRemaining > 0 ? "opacity-30 cursor-not-allowed" : "hover:bg-stone-800 active:bg-stone-700"
+            }`}
           >
             {d}
           </button>
@@ -218,15 +313,21 @@ export default function LoginScreen({
         <div />
         <button
           onClick={() => pressDigit("0")}
+          disabled={lockoutRemaining > 0}
           data-testid="pin-digit-0"
-          className="rounded-xl py-4 text-lg font-medium bg-stone-900 border border-stone-800 text-stone-100 hover:bg-stone-800 active:bg-stone-700 transition cursor-pointer"
+          className={`rounded-xl py-4 text-lg font-medium bg-stone-900 border border-stone-800 text-stone-100 transition cursor-pointer ${
+            lockoutRemaining > 0 ? "opacity-30 cursor-not-allowed" : "hover:bg-stone-800 active:bg-stone-700"
+          }`}
         >
           0
         </button>
         <button
           onClick={() => setPin((p) => p.slice(0, -1))}
+          disabled={lockoutRemaining > 0}
           data-testid="pin-clear"
-          className="rounded-xl py-4 flex items-center justify-center bg-stone-900 border border-stone-800 text-stone-300 hover:bg-stone-800 active:bg-stone-700 transition cursor-pointer"
+          className={`rounded-xl py-4 flex items-center justify-center bg-stone-900 border border-stone-800 text-stone-300 transition cursor-pointer ${
+            lockoutRemaining > 0 ? "opacity-30 cursor-not-allowed" : "hover:bg-stone-800 active:bg-stone-700"
+          }`}
         >
           <Delete size={18} />
         </button>

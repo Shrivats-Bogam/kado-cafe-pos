@@ -33,15 +33,26 @@ export class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: "40px", fontFamily: "sans-serif", textAlign: "center", backgroundColor: "#fff5f5", color: "#c53030", borderRadius: "8px", margin: "20px" }}>
-          <h2 style={{ fontSize: "24px", marginBottom: "12px" }}>Something went wrong</h2>
-          <p style={{ marginBottom: "20px" }}>An unforeseen error occurred in this section of Kado Cafe POS.</p>
-          <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-            <button onClick={this.handleReset} style={{ padding: "10px 18px", backgroundColor: "#3182ce", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}>
-              Try Again
+        <div className="p-8 my-6 max-w-lg mx-auto bg-stone-900 border border-stone-800 rounded-2xl text-center shadow-xl">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center font-bold text-xl">
+            !
+          </div>
+          <h2 className="text-lg font-bold text-stone-100 mb-1">Section Temporarily Unavailable</h2>
+          <p className="text-xs text-stone-400 mb-5">
+            An unforeseen rendering glitch occurred in this tab. Other cafe modules continue running normally.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={this.handleReset}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold rounded-xl transition cursor-pointer"
+            >
+              Retry Tab
             </button>
-            <button onClick={this.handleReload} style={{ padding: "10px 18px", backgroundColor: "#e2e8f0", color: "#2d3748", border: "none", borderRadius: "6px", cursor: "pointer" }}>
-              Reload Application
+            <button
+              onClick={this.handleReload}
+              className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium rounded-xl transition cursor-pointer"
+            >
+              Reload POS
             </button>
           </div>
         </div>

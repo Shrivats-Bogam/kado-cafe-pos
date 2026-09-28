@@ -22,7 +22,7 @@ import SettingsPanel from "../views/SettingsPanel.jsx";
 import SettingsView from "../views/SettingsView.jsx";
 import TableQRModal from "../views/TableQRModal.jsx";
 
-import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient } from "../lib/storage.js";
+import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth } from "../lib/storage.js";
 import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
@@ -31,6 +31,7 @@ import { initializeAuthSession, loginWithEmail, logoutUser, resolveOrganizationM
 import { filterProductionAccounts } from "../lib/env.js";
 import { executeServerPayment, executeServerSplitPayment, executeServerRefund } from "../lib/serverTransactions.js";
 import { makeId } from "../lib/id.js";
+import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import * as actions from "../state/actions.js";
 
 const TABS = [
@@ -59,6 +60,7 @@ export default function StaffApp() {
   const [showMobileMore, setShowMobileMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState("connecting"); // "connected" | "reconnecting" | "offline"
   const skipNextSave = useRef(false);
   const prevKitchenStatuses = useRef({}); // for toast notifications on status changes
   const toaster = useToaster();
@@ -216,25 +218,65 @@ export default function StaffApp() {
       });
     };
 
-    // Subscribe to realtime changes — fires within ~200ms of remote writes
-    const unsub = subscribeToChanges((json) => {
-      if (!json) return;
-      setStateRaw((prev) => {
-        if (!prev) return prev;
-        let incoming;
-        try { incoming = { ...defaultState(), ...prev, ...JSON.parse(json) }; }
-        catch { return prev; }
-        if (JSON.stringify(incoming) === JSON.stringify(prev)) return prev;
-        skipNextSave.current = true;
-        fireStatusToasts(prev, incoming, watched, toaster, soundEnabled);
-        prevKitchenStatuses.current = snapshotStatuses(incoming);
-        return incoming;
-      });
-    });
+    // Network online & offline event handlers
+    const handleOnline = () => {
+      setConnectionStatus("reconnecting");
+      refetchAndApply();
+    };
+    const handleOffline = () => {
+      setConnectionStatus("offline");
+      setConnected(false);
+    };
 
-    // Polling fallback dropped to 90s to catch a dead realtime connection — much less than before.
-    // Realtime channel itself tries to reconnect automatically; we just need a safety net.
-    const interval = setInterval(refetchAndApply, 90000);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setConnectionStatus("offline");
+      setConnected(false);
+    }
+
+    // Subscribe to realtime changes with active channel lifecycle status callback
+    const unsub = subscribeToChanges(
+      (json) => {
+        if (!json) return;
+        setStateRaw((prev) => {
+          if (!prev) return prev;
+          let incoming;
+          try { incoming = { ...defaultState(), ...prev, ...JSON.parse(json) }; }
+          catch { return prev; }
+          if (JSON.stringify(incoming) === JSON.stringify(prev)) return prev;
+          skipNextSave.current = true;
+          fireStatusToasts(prev, incoming, watched, toaster, soundEnabled);
+          prevKitchenStatuses.current = snapshotStatuses(incoming);
+          return incoming;
+        });
+      },
+      (status) => {
+        if (status === "SUBSCRIBED") {
+          setConnectionStatus("connected");
+          setConnected(true);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setConnectionStatus("reconnecting");
+          setConnected(false);
+        }
+      }
+    );
+
+    // Active heartbeat check every 30s to verify cloud database connectivity & latency
+    const heartbeatInterval = setInterval(async () => {
+      const health = await checkConnectionHealth();
+      if (!health.online) {
+        setConnectionStatus("offline");
+        setConnected(false);
+      } else if (health.mode === "cloud") {
+        setConnectionStatus("connected");
+        setConnected(true);
+      }
+    }, 30000);
+
+    // Polling safety net fallback (60s)
+    const interval = setInterval(refetchAndApply, 60000);
 
     // Multi-tab storage sync for local mode (sub-10ms response when another tab updates localStorage)
     const handleStorageChange = (e) => {
@@ -244,16 +286,40 @@ export default function StaffApp() {
     };
     window.addEventListener("storage", handleStorageChange);
 
-    // Realtime connection status → reflects on the sidebar/offline
-    const pingTimer = setTimeout(() => setConnected(true), 1500);
-
     return () => { 
       unsub && unsub(); 
       clearInterval(interval); 
-      clearTimeout(pingTimer); 
+      clearInterval(heartbeatInterval);
       window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, [loaded, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- Auto Session Timeout (Idle Shift Lock after 5 mins) ----------
+  useEffect(() => {
+    if (!currentUser) return; // already locked
+
+    const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of inactivity
+    let timeoutId;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        lockShift();
+        toaster.push("Terminal locked due to inactivity", "info");
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const activityEvents = ["mousedown", "mousemove", "keydown", "touchstart", "scroll"];
+    activityEvents.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Reset tab & sync current user role when employee record changes ----------
   useEffect(() => {
@@ -567,7 +633,22 @@ export default function StaffApp() {
             <Coffee size={20} /> Kado Cafe
           </h1>
           {isCloudEnabled && (
-            <span title={connected ? "Realtime connected" : "Connecting…"} className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`} />
+            <span
+              title={
+                connectionStatus === "connected"
+                  ? "Realtime connected (<200ms cloud sync)"
+                  : connectionStatus === "offline"
+                  ? "Offline mode (Local storage active)"
+                  : "Reconnecting to cloud..."
+              }
+              className={`w-2.5 h-2.5 rounded-full transition-all ${
+                connectionStatus === "connected"
+                  ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                  : connectionStatus === "offline"
+                  ? "bg-rose-500"
+                  : "bg-amber-500 animate-pulse"
+              }`}
+            />
           )}
         </div>
         {visibleTabs.map((t) => (
@@ -629,7 +710,22 @@ export default function StaffApp() {
             <Coffee size={18} className="text-amber-500" />
             <h1 className="font-serif text-lg text-stone-50">Kado Cafe</h1>
             {isCloudEnabled && (
-              <span className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`} />
+              <span
+                title={
+                  connectionStatus === "connected"
+                    ? "Realtime connected (<200ms cloud sync)"
+                    : connectionStatus === "offline"
+                    ? "Offline mode (Local storage active)"
+                    : "Reconnecting to cloud..."
+                }
+                className={`w-2.5 h-2.5 rounded-full transition-all ${
+                  connectionStatus === "connected"
+                    ? "bg-emerald-500"
+                    : connectionStatus === "offline"
+                    ? "bg-rose-500"
+                    : "bg-amber-500 animate-pulse"
+                }`}
+              />
             )}
           </div>
           <div className="flex items-center gap-1">
@@ -648,6 +744,7 @@ export default function StaffApp() {
         </div>
 
         <div className="p-4 max-w-6xl mx-auto">
+          <ErrorBoundary>
           {tab === "dashboard" && (
             <Dashboard 
               state={state} 
@@ -756,6 +853,7 @@ export default function StaffApp() {
               onNavigate={(targetTab) => setTab(targetTab)}
             />
           )}
+          </ErrorBoundary>
         </div>
       </div>
 
