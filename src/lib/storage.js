@@ -20,10 +20,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { getOrganizationId, tagTenantOwnership } from "./multitenant.js";
 import { APP_ENV, IS_E2E, isTestAccount } from "./env.js";
+import { CURRENT_SCHEMA_VERSION, runSchemaMigrations } from "../state/migrations.js";
 
-// Schema version we tag every write with. Bump only when the on-wire shape
-// changes meaningfully. Existing reads without `_v` are treated as v0.
-export const SCHEMA_VERSION = 1;
+// Schema version we tag every write with. Managed via migrations.js.
+export const SCHEMA_VERSION = CURRENT_SCHEMA_VERSION;
 
 // Environment-aware state key target:
 // Production uses "kado-cafe"
@@ -109,6 +109,7 @@ function serializeWrites(fn) {
  * @returns {Promise<string|null>} null if no state saved yet
  */
 export async function getState() {
+  let raw = null;
   if (useSupabase) {
     try {
       const { data, error } = await supabase
@@ -117,17 +118,33 @@ export async function getState() {
         .eq("cafe_id", CAFE_ID)
         .maybeSingle();
       if (!error && data?.data) {
-        const json = JSON.stringify(data.data);
-        lastFetched = json;
-        return json;
+        raw = JSON.stringify(data.data);
+        lastFetched = raw;
       }
     } catch (err) {
       console.warn("[kado-cafe] Supabase getState error, using local fallback:", err);
     }
   }
 
-  const raw = (typeof localStorage !== "undefined") ? localStorage.getItem(LS_KEY) : null;
-  return raw;
+  if (!raw && typeof localStorage !== "undefined") {
+    raw = localStorage.getItem(LS_KEY);
+  }
+
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const { state: migratedState, migrated } = runSchemaMigrations(parsed);
+    if (migrated) {
+      const migratedJson = JSON.stringify(migratedState);
+      saveState(migratedJson).catch((err) => console.warn("[kado-cafe] Background migration save notice:", err));
+      return migratedJson;
+    }
+    return raw;
+  } catch (err) {
+    console.error("[kado-cafe] Error during state migration check:", err);
+    return raw;
+  }
 }
 
 /**
