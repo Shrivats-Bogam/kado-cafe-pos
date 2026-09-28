@@ -3,6 +3,7 @@ import { ChefHat, CheckCircle2 } from "lucide-react";
 import KitchenTicket from "../components/KitchenTicket.jsx";
 import KitchenFilters from "../components/KitchenFilters.jsx";
 import KitchenBulkActions from "../components/KitchenBulkActions.jsx";
+import { WidgetErrorBoundary } from "../components/ErrorBoundary.jsx";
 import { minutesSince } from "../lib/currency.js";
 
 // Web Audio API Beep for genuinely new incoming orders
@@ -256,17 +257,18 @@ export default function KitchenView({
               : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           }`}>
             {processedTickets.map((ticket) => (
-              <KitchenTicket
-                key={ticket.id}
-                ticket={ticket}
-                menuItems={menuItems}
-                elapsedMinutes={ticket.elapsedMinutes}
-                urgencyLevel={ticket.urgencyLevel}
-                displayMode={displayMode}
-                isSelected={selectedIds.includes(ticket.id)}
-                onToggleSelect={toggleSelect}
-                onAction={handleAction}
-              />
+              <WidgetErrorBoundary key={ticket.id} name={`Ticket #${ticket.number || ticket.id}`}>
+                <KitchenTicket
+                  ticket={ticket}
+                  menuItems={menuItems}
+                  elapsedMinutes={ticket.elapsedMinutes}
+                  urgencyLevel={ticket.urgencyLevel}
+                  displayMode={displayMode}
+                  isSelected={selectedIds.includes(ticket.id)}
+                  onToggleSelect={toggleSelect}
+                  onAction={handleAction}
+                />
+              </WidgetErrorBoundary>
             ))}
           </div>
         )}

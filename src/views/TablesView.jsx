@@ -7,6 +7,7 @@ import TableCard from "../components/TableCard.jsx";
 import TableActionsMenu from "../components/TableActionsMenu.jsx";
 import TableModal from "../components/TableModal.jsx";
 import { ConfirmDialog } from "../components/ui.jsx";
+import { WidgetErrorBoundary } from "../components/ErrorBoundary.jsx";
 
 export default function TablesView({
   tables = [],
@@ -173,14 +174,15 @@ export default function TablesView({
         /* Responsive Grid View: 4 cols desktop (lg), 2 cols tablet (md), 1 col mobile (sm) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-1 items-stretch">
           {filteredTables.map((t) => (
-            <TableCard
-              key={t.id}
-              table={t}
-              menuItems={menuItems}
-              onOpenTable={onOpenTable}
-              onEditTable={(table) => setEditingTable(table)}
-              onOpenMoreMenu={(table) => setSelectedTableForMenu(table)}
-            />
+            <WidgetErrorBoundary key={t.id} name={`Table ${t.number || t.id}`}>
+              <TableCard
+                table={t}
+                menuItems={menuItems}
+                onOpenTable={onOpenTable}
+                onEditTable={(table) => setEditingTable(table)}
+                onOpenMoreMenu={(table) => setSelectedTableForMenu(table)}
+              />
+            </WidgetErrorBoundary>
           ))}
         </div>
       ) : (

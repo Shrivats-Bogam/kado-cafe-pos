@@ -759,7 +759,7 @@ export default function StaffApp() {
         </div>
 
         <div className="p-4 max-w-6xl mx-auto">
-          <ErrorBoundary>
+          <ErrorBoundary key={tab} name={tab.charAt(0).toUpperCase() + tab.slice(1)}>
           {tab === "dashboard" && (
             <Dashboard 
               state={state} 
