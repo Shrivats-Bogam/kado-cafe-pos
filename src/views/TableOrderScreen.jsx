@@ -1,4 +1,4 @@
-import { useState, useMemo, useDeferredValue } from "react";
+import { useState, useMemo, useDeferredValue, useCallback, memo } from "react";
 import {
   ArrowLeft, Zap, StickyNote, MessageSquare, Edit3, Trash2,
   Plus, Minus, Search, MoreVertical, UserPlus, User, ShieldAlert,
@@ -8,6 +8,50 @@ import { IconButton, PrimaryButton, Modal, ModalHeader, ConfirmDialog } from "..
 import BillModal from "../components/BillModal.jsx";
 import { currency, orderTotal } from "../lib/currency.js";
 import { CATEGORIES as DEFAULT_CATEGORIES } from "../data/menu.js";
+
+const MenuItemCard = memo(function MenuItemCard({ item, qty, onAdd, onDecrement }) {
+  return (
+    <div className="bg-stone-900 border border-stone-800/90 hover:border-stone-700 rounded-2xl p-3 flex flex-col justify-between gap-2.5 transition shadow-xs group">
+      <div>
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${item.isVeg !== false ? "bg-emerald-500" : "bg-rose-500"}`} />
+          <p className="text-xs font-bold text-stone-100 leading-tight line-clamp-2" title={item.name}>
+            {item.name}
+          </p>
+        </div>
+        <p className="text-xs font-mono font-bold text-amber-400">{currency(item.price)}</p>
+      </div>
+      {qty === 0 ? (
+        <button
+          type="button"
+          data-testid={`menu-item-add-${item.name}`}
+          onClick={() => onAdd(item.id)}
+          className="w-full h-8 rounded-xl bg-stone-800 hover:bg-amber-500 hover:text-stone-950 active:bg-amber-600 text-stone-200 text-xs font-bold flex items-center justify-center gap-1 border border-stone-700 transition cursor-pointer"
+        >
+          <Plus size={13} /> Add
+        </button>
+      ) : (
+        <div className="flex items-center justify-between rounded-xl bg-stone-950 border border-amber-500/40 p-0.5 h-8">
+          <button
+            type="button"
+            onClick={() => onDecrement(item.id)}
+            className="w-7 h-full flex items-center justify-center text-stone-400 hover:text-stone-100 hover:bg-stone-800 rounded-lg cursor-pointer"
+          >
+            <Minus size={13} />
+          </button>
+          <span className="text-xs font-mono font-bold text-amber-400">{qty}</span>
+          <button
+            type="button"
+            onClick={() => onAdd(item.id)}
+            className="w-7 h-full flex items-center justify-center text-amber-400 hover:text-amber-300 hover:bg-stone-800 rounded-lg cursor-pointer"
+          >
+            <Plus size={13} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
 
 export default function TableOrderScreen({
   table,
@@ -55,16 +99,22 @@ export default function TableOrderScreen({
 
   // Calculation
   const computedDiscountPct = discountType === "pct" ? discountPct : 0;
-  const totals = orderTotal(cart, menuItems, computedDiscountPct, gstOn);
-  if (discountType === "flat" && discountFlat > 0) {
-    const rawSub = totals.subtotal;
-    const effectiveDiscount = Math.min(rawSub, discountFlat);
-    const taxable = Math.max(0, rawSub - effectiveDiscount);
-    const calculatedGst = gstOn ? Math.round(taxable * 0.05 * 100) / 100 : 0;
-    totals.discount = effectiveDiscount;
-    totals.gst = calculatedGst;
-    totals.grandTotal = Math.round((taxable + calculatedGst) * 100) / 100;
-  }
+  const totals = useMemo(() => {
+    const t = orderTotal(cart, menuItems, computedDiscountPct, gstOn);
+    if (discountType === "flat" && discountFlat > 0) {
+      const rawSub = t.subtotal;
+      const effectiveDiscount = Math.min(rawSub, discountFlat);
+      const taxable = Math.max(0, rawSub - effectiveDiscount);
+      const calculatedGst = gstOn ? Math.round(taxable * 0.05 * 100) / 100 : 0;
+      return {
+        ...t,
+        discount: effectiveDiscount,
+        gst: calculatedGst,
+        grandTotal: Math.round((taxable + calculatedGst) * 100) / 100,
+      };
+    }
+    return t;
+  }, [cart, menuItems, computedDiscountPct, gstOn, discountType, discountFlat]);
 
   const totalItemsCount = cart.reduce((acc, i) => acc + (i.qty || 1), 0);
   const isRush = priority === "Rush";
@@ -104,9 +154,15 @@ export default function TableOrderScreen({
     return map;
   }, [cart]);
 
+  // Fast Menu Lookup Map (O(1) instead of menuItems.find per lookup)
+  const menuIndex = useMemo(
+    () => new Map((menuItems || []).map((m) => [m.id, m])),
+    [menuItems]
+  );
+
   // --- Cart Mutations ---
-  const handleAddItem = (menuItemId) => {
-    const mi = menuItems.find((m) => m.id === menuItemId);
+  const handleAddItem = useCallback((menuItemId) => {
+    const mi = menuIndex.get(menuItemId);
     if (!mi || mi.available === false) return;
 
     setCart((prev) => {
@@ -116,9 +172,9 @@ export default function TableOrderScreen({
       }
       return [...prev, { menuItemId, qty: 1, name: mi.name, price: mi.price }];
     });
-  };
+  }, [menuIndex]);
 
-  const handleDecrementItem = (menuItemId) => {
+  const handleDecrementItem = useCallback((menuItemId) => {
     setCart((prev) => {
       const exists = prev.find((i) => i.menuItemId === menuItemId);
       if (!exists) return prev;
@@ -127,7 +183,7 @@ export default function TableOrderScreen({
       }
       return prev.map((i) => (i.menuItemId === menuItemId ? { ...i, qty: i.qty - 1 } : i));
     });
-  };
+  }, []);
 
   const handleRemoveItem = (menuItemId) => {
     setCart((prev) => prev.filter((i) => i.menuItemId !== menuItemId));
@@ -149,11 +205,11 @@ export default function TableOrderScreen({
   // --- Order Saving ---
   const handleSaveOrder = () => {
     const unavailableCartItem = cart.find((item) => {
-      const mi = menuItems.find((m) => m.id === item.menuItemId);
+      const mi = menuIndex.get(item.menuItemId);
       return mi && mi.available === false;
     });
     if (unavailableCartItem) {
-      const mi = menuItems.find((m) => m.id === unavailableCartItem.menuItemId);
+      const mi = menuIndex.get(unavailableCartItem.menuItemId);
       alert(`"${mi?.name || "Item"}" is no longer available. Please remove it from the cart.`);
       return;
     }
@@ -447,58 +503,15 @@ export default function TableOrderScreen({
           {/* C. Menu Item Cards Grid */}
           <div className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-              {filteredMenuItems.map((item) => {
-                const qty = cartMap.get(item.id) || 0;
-                return (
-                  <div
-                    key={item.id}
-                    className="bg-stone-900 border border-stone-800/90 hover:border-stone-700 rounded-2xl p-3 flex flex-col justify-between gap-2.5 transition shadow-xs group"
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${
-                            item.isVeg !== false ? "bg-emerald-500" : "bg-rose-500"
-                          }`}
-                        />
-                        <p className="text-xs font-bold text-stone-100 leading-tight line-clamp-2" title={item.name}>
-                          {item.name}
-                        </p>
-                      </div>
-                      <p className="text-xs font-mono font-bold text-amber-400">{currency(item.price)}</p>
-                    </div>
-
-                    {qty === 0 ? (
-                      <button
-                        type="button"
-                        data-testid={`menu-item-add-${item.name}`}
-                        onClick={() => handleAddItem(item.id)}
-                        className="w-full h-8 rounded-xl bg-stone-800 hover:bg-amber-500 hover:text-stone-950 active:bg-amber-600 text-stone-200 text-xs font-bold flex items-center justify-center gap-1 border border-stone-700 transition cursor-pointer"
-                      >
-                        <Plus size={13} /> Add
-                      </button>
-                    ) : (
-                      <div className="flex items-center justify-between rounded-xl bg-stone-950 border border-amber-500/40 p-0.5 h-8">
-                        <button
-                          type="button"
-                          onClick={() => handleDecrementItem(item.id)}
-                          className="w-7 h-full flex items-center justify-center text-stone-400 hover:text-stone-100 hover:bg-stone-800 rounded-lg cursor-pointer"
-                        >
-                          <Minus size={13} />
-                        </button>
-                        <span className="text-xs font-mono font-bold text-amber-400">{qty}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleAddItem(item.id)}
-                          className="w-7 h-full flex items-center justify-center text-amber-400 hover:text-amber-300 hover:bg-stone-800 rounded-lg cursor-pointer"
-                        >
-                          <Plus size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {filteredMenuItems.map((item) => (
+                <MenuItemCard
+                  key={item.id}
+                  item={item}
+                  qty={cartMap.get(item.id) || 0}
+                  onAdd={handleAddItem}
+                  onDecrement={handleDecrementItem}
+                />
+              ))}
 
               {filteredMenuItems.length === 0 && (
                 <div className="col-span-full py-12 text-center bg-stone-900/40 rounded-2xl border border-stone-800/60 flex flex-col items-center justify-center gap-1.5">
@@ -546,7 +559,7 @@ export default function TableOrderScreen({
               </div>
             ) : (
               cart.map((item, idx) => {
-                const mi = menuItems.find((m) => m.id === item.menuItemId);
+                const mi = menuIndex.get(item.menuItemId);
                 const itemName = mi?.name || item.name || "Item";
                 const unitPrice = mi?.price ?? item.price ?? 0;
                 const lineTotal = unitPrice * (item.qty || 1);
@@ -826,7 +839,7 @@ export default function TableOrderScreen({
             {/* Mobile Cart Items */}
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {cart.map((item, idx) => {
-                const mi = menuItems.find((m) => m.id === item.menuItemId);
+                const mi = menuIndex.get(item.menuItemId);
                 return (
                   <div key={idx} className="flex justify-between items-center bg-stone-950 p-2 rounded-xl border border-stone-800 text-xs">
                     <div>

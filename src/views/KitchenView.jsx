@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import { ChefHat, CheckCircle2 } from "lucide-react";
 import KitchenTicket from "../components/KitchenTicket.jsx";
 import KitchenFilters from "../components/KitchenFilters.jsx";
@@ -25,6 +25,29 @@ const playBeep = () => {
     // Ignore audio context failures
   }
 };
+
+// Skips re-render unless a rendered field actually changed.
+// (ticket objects are rebuilt each 30s tick, so compare by field, not identity)
+const MemoKitchenTicket = memo(KitchenTicket, (prev, next) => {
+  const a = prev.ticket;
+  const b = next.ticket;
+  return (
+    a.id === b.id &&
+    a.type === b.type &&
+    a.status === b.status &&
+    a.priority === b.priority &&
+    a.createdAt === b.createdAt &&
+    a.notes === b.notes &&
+    a.items === b.items &&
+    a.customerName === b.customerName &&
+    a.number === b.number &&
+    a.elapsedMinutes === b.elapsedMinutes &&
+    a.urgencyLevel === b.urgencyLevel &&
+    prev.isSelected === next.isSelected &&
+    prev.displayMode === next.displayMode &&
+    prev.menuItems === next.menuItems
+  );
+});
 
 export default function KitchenView({ 
   tables = [], 
@@ -191,15 +214,15 @@ export default function KitchenView({
   }, [tickets, filter, searchQuery, now]);
 
   // Action Handlers
-  const toggleSelect = (id) => {
+  const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => 
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
-  };
+  }, []);
 
-  const handleAction = (ticket, nextStatus) => {
+  const handleAction = useCallback((ticket, nextStatus) => {
     onCycleKitchen(ticket.type, ticket.id, nextStatus);
-  };
+  }, [onCycleKitchen]);
 
   const handleBulkAction = (action) => {
     selectedIds.forEach((id) => {
@@ -258,7 +281,7 @@ export default function KitchenView({
           }`}>
             {processedTickets.map((ticket) => (
               <WidgetErrorBoundary key={ticket.id} name={`Ticket #${ticket.number || ticket.id}`}>
-                <KitchenTicket
+                <MemoKitchenTicket
                   ticket={ticket}
                   menuItems={menuItems}
                   elapsedMinutes={ticket.elapsedMinutes}

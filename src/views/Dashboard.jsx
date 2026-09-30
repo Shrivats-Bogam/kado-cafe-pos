@@ -89,6 +89,11 @@ export default function Dashboard({ state = {}, onNavigate, currentUser }) {
   const { peakHour } = useMemo(() => aggregateHourlyPerformance(todayOrders), [todayOrders]);
   const { tableRevenue, parcelRevenue } = useMemo(() => aggregateChannelPerformance(todayOrders), [todayOrders]);
 
+  const totalPointsPool = useMemo(
+    () => customers.reduce((sum, c) => sum + (c.points || 0), 0),
+    [customers]
+  );
+
   // 6. Reports 3.0 Owner Insights & Warnings
   const periodMetrics = useMemo(() => ({
     current: todayRev,
@@ -429,9 +434,7 @@ export default function Dashboard({ state = {}, onNavigate, currentUser }) {
               </div>
               <div>
                 <span className="text-[10px] text-stone-500 block">Points Pool</span>
-                <span className="font-bold text-purple-400">
-                  {customers.reduce((sum, c) => sum + (c.points || 0), 0)}
-                </span>
+                <span className="font-bold text-purple-400">{totalPointsPool}</span>
               </div>
             </div>
           </div>
