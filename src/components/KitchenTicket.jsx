@@ -1,6 +1,7 @@
-import { Clock, Zap, CheckCircle2, Play, Check, StickyNote } from "lucide-react";
+import { Clock, Zap, CheckCircle2, Play, Check, StickyNote, Printer } from "lucide-react";
 import { Card, Pill } from "./ui.jsx";
 import { formatElapsedTime } from "../lib/currency.js";
+import { hardwarePrinter } from "../lib/hardwarePrinter.js";
 
 export default function KitchenTicket({ 
   ticket, 
@@ -110,12 +111,25 @@ export default function KitchenTicket({
           } ${isLarge ? "text-sm" : "text-xs"}`}>
             <Clock size={isLarge ? 14 : 12} /> {elapsedTimeStr || `${elapsedMinutes}m`}
           </span>
-          <Pill tone={
-            status === "New" ? "amber"
-            : status === "Cooking" || status === "Preparing" ? "sky"
-            : status === "Ready" ? "emerald"
-            : "stone"
-          }>{status}</Pill>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              title="Print Kitchen Order Ticket (KOT)"
+              onClick={(e) => {
+                e.stopPropagation();
+                hardwarePrinter.printKOT(ticket, { receiptWidth: "80mm" });
+              }}
+              className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-amber-400 transition cursor-pointer"
+            >
+              <Printer size={12} />
+            </button>
+            <Pill tone={
+              status === "New" ? "amber"
+              : status === "Cooking" || status === "Preparing" ? "sky"
+              : status === "Ready" ? "emerald"
+              : "stone"
+            }>{status}</Pill>
+          </div>
         </div>
       </div>
 

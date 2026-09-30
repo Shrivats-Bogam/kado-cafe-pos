@@ -3,6 +3,7 @@ import { Printer, Check, RefreshCw, AlertCircle } from "lucide-react";
 import { Card, IconButton, PrimaryButton } from "./ui.jsx";
 import { currency } from "../lib/currency.js";
 import { useMenuIndex } from "../lib/menuIndex.js";
+import { hardwarePrinter } from "../lib/hardwarePrinter.js";
 
 // Bill/checkout modal for Table Order Screen & Direct Table Billing.
 export default function BillModal({ title, customerName, cart = [], menuItems = [], totals, customers = [], onClose, onConfirm }) {
@@ -55,11 +56,48 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
       ].filter(p => p.amount > 0) : null;
 
       await onConfirm(paymentMode, phone, redeemPoints ? pointsValue : 0, splitBreakdown);
+
+      // Auto-kick RJ11 Cash Drawer on cash settlements
+      if (paymentMode === "Cash" || splitCashNum > 0) {
+        hardwarePrinter.kickCashDrawer().catch(() => {});
+      }
     } catch (err) {
       console.error("[BillModal] Payment confirmation error:", err);
       setErrorMessage(err.message || "Failed to settle payment on server. Bill not marked as paid.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePrintReceipt = async () => {
+    const orderData = {
+      id: invoiceNo,
+      source: title,
+      customerName,
+      phone,
+      items: cart.map((c) => {
+        const mi = idx.get(c.menuItemId);
+        return {
+          name: mi?.name || c.name || c.menuItemId,
+          qty: c.qty,
+          price: mi?.price || c.price || 0,
+          notes: c.notes,
+        };
+      }),
+      grandTotal: finalTotal,
+      subtotal: totals.subtotal,
+      tax: totals.tax || totals.gst || 0,
+      discount: totals.discount || 0,
+      pointsRedeemed: redeemPoints ? pointsValue : 0,
+      paymentMode,
+      paidAt: new Date().toISOString(),
+    };
+
+    try {
+      await hardwarePrinter.printReceipt(orderData, { receiptWidth: printWidth });
+    } catch (err) {
+      console.warn("[BillModal] Hardware print warning, falling back:", err);
+      window.print();
     }
   };
 
@@ -254,7 +292,7 @@ export default function BillModal({ title, customerName, cart = [], menuItems = 
         <div className="grid grid-cols-2 gap-2 pt-1">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handlePrintReceipt}
             className="rounded-xl border border-stone-700 hover:bg-stone-800 text-stone-300 py-2.5 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer min-h-[44px]"
           >
             <Printer size={15} /> Print Receipt

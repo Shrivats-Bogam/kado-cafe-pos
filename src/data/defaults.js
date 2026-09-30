@@ -231,8 +231,14 @@ export function defaultSettings() {
     allowDiscounts: true,
     requireDiscountApproval: false,
 
-    // Receipts
+    // Receipts & Hardware Thermal Printing
     receiptWidth: "80mm",
+    printerTransport: "browser",
+    printerBaudRate: 9600,
+    kickDrawerOnCash: true,
+    autoCutPaper: true,
+    buzzerOnKOT: true,
+    autoPrintKOTOnOrder: false,
     showLogoOnReceipt: true,
     showAddressOnReceipt: true,
     showGstinOnReceipt: true,

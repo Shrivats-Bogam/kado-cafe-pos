@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Settings, Building2, Receipt, Coffee, ChefHat, Menu as MenuIcon, Package,
   Users, ShieldCheck, Bot, Database, AlertTriangle, Save, RefreshCw, Check,
-  Download, Trash2, ArrowRight, ShieldAlert, AlertCircle, Archive
+  Download, Trash2, ArrowRight, ShieldAlert, AlertCircle, Archive,
+  Printer, Usb, Bluetooth, Zap, Scissors, Volume2
 } from "lucide-react";
 import { Card, PrimaryButton, SecondaryButton, Pill } from "../components/ui.jsx";
 import { useToaster } from "../components/Toaster.jsx";
 import { defaultSettings, ROLE_LABELS } from "../data/defaults.js";
+import { hardwarePrinter } from "../lib/hardwarePrinter.js";
 import { getAISettings, saveAISettings, PROVIDERS, testAIConnection } from "../lib/ai.js";
 import {
   buildBackupPayload,
@@ -57,6 +59,63 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
   const [restoreValidation, setRestoreValidation] = useState(null);
   const [restoreInput, setRestoreInput] = useState("");
   const [restoreError, setRestoreError] = useState("");
+
+  // Hardware thermal printer state
+  const [printerStatus, setPrinterStatus] = useState(() => hardwarePrinter.getStatus());
+  const [printerConnecting, setPrinterConnecting] = useState(false);
+  const [printerActionMsg, setPrinterActionMsg] = useState("");
+
+  useEffect(() => {
+    return hardwarePrinter.subscribe((status) => {
+      setPrinterStatus(status);
+    });
+  }, []);
+
+  const handleConnectHardware = async (type) => {
+    setPrinterConnecting(true);
+    setPrinterActionMsg("");
+    try {
+      if (type === "webusb") {
+        await hardwarePrinter.connectUSB();
+        setPrinterActionMsg("Direct USB Thermal Printer Connected!");
+      } else if (type === "webserial") {
+        await hardwarePrinter.connectSerial(form.printerBaudRate || 9600);
+        setPrinterActionMsg("Serial COM Thermal Printer Connected!");
+      } else if (type === "webbluetooth") {
+        await hardwarePrinter.connectBluetooth();
+        setPrinterActionMsg("Bluetooth Thermal Printer Connected!");
+      }
+    } catch (err) {
+      setPrinterActionMsg(`Connection failed: ${err.message}`);
+    } finally {
+      setPrinterConnecting(false);
+    }
+  };
+
+  const handleDisconnectHardware = async () => {
+    await hardwarePrinter.disconnect();
+    setPrinterActionMsg("Printer disconnected (reverted to browser print).");
+  };
+
+  const handleTestPrint = async () => {
+    setPrinterActionMsg("Sending test print...");
+    try {
+      await hardwarePrinter.printTestReceipt(form);
+      setPrinterActionMsg("Test print command sent successfully!");
+    } catch (err) {
+      setPrinterActionMsg(`Test print error: ${err.message}`);
+    }
+  };
+
+  const handleTestDrawer = async () => {
+    setPrinterActionMsg("Pulsing cash drawer...");
+    try {
+      await hardwarePrinter.kickCashDrawer();
+      setPrinterActionMsg("Cash drawer kick pulse sent!");
+    } catch (err) {
+      setPrinterActionMsg(`Drawer pulse error: ${err.message}`);
+    }
+  };
 
   // Sync form when state settings update externally
   useEffect(() => {
@@ -427,13 +486,120 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
             </div>
           )}
 
-          {/* Section 3: Receipts & Thermal Print */}
+          {/* Section 3: Hardware Connectivity & Thermal Printing */}
           {activeSection === "receipts" && (
             <div className="space-y-4 text-xs">
-              <h3 className="text-sm font-bold text-stone-100 border-b border-stone-800 pb-2 flex items-center gap-2">
-                <Receipt size={16} className="text-amber-500" /> Receipt & Thermal Printing
+              <h3 className="text-sm font-bold text-stone-100 border-b border-stone-800 pb-2 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Printer size={16} className="text-amber-500" /> Hardware Connectivity & Thermal Printing
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                  printerStatus.isDirectHardware 
+                    ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" 
+                    : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                }`}>
+                  {printerStatus.isDirectHardware ? "⚡ Direct Hardware Connected" : "🖨️ Ready (Browser Engine)"}
+                </span>
               </h3>
 
+              {/* Status & Active Device Banner */}
+              <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wider block">Active Output Pipeline</span>
+                  <span className="text-stone-200 font-bold text-sm flex items-center gap-1.5 mt-0.5">
+                    {printerStatus.deviceName}
+                  </span>
+                  <span className="text-[11px] text-stone-400 block mt-0.5">
+                    {printerStatus.isDirectHardware 
+                      ? "High-speed raw ESC/POS binary bytecode (<30ms latency, zero browser print popups)"
+                      : "Standard OS thermal printing via browser print pipeline with auto-formatting"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleTestPrint}
+                    className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Receipt size={14} className="text-amber-400" /> Test Print
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestDrawer}
+                    className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Zap size={14} className="text-emerald-400" /> Kick Drawer
+                  </button>
+                </div>
+              </div>
+
+              {printerActionMsg && (
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-mono">
+                  {printerActionMsg}
+                </div>
+              )}
+
+              {/* Hardware Pairing Controls */}
+              <div className="p-3 bg-stone-900/60 rounded-xl border border-stone-800 space-y-3">
+                <span className="text-stone-400 font-semibold block">Direct Hardware Pairing (No-Dialog Ultra-Fast Printing)</span>
+                
+                {printerStatus.isDirectHardware ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-stone-300">
+                      Printer actively linked to <strong>{printerStatus.deviceName}</strong>.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleDisconnectHardware}
+                      disabled={!isOwner}
+                      className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 rounded-lg font-semibold text-xs transition cursor-pointer"
+                    >
+                      Disconnect Device
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConnectHardware("webusb")}
+                      disabled={!isOwner || printerConnecting}
+                      className="p-3 bg-stone-950 hover:bg-stone-800 border border-stone-800 hover:border-amber-500/50 rounded-xl text-left transition cursor-pointer flex flex-col gap-1"
+                    >
+                      <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                        <Usb size={15} /> Direct WebUSB
+                      </div>
+                      <span className="text-[11px] text-stone-400">Epson, TVS, POS-80 via USB cable (&lt;30ms instant print)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleConnectHardware("webserial")}
+                      disabled={!isOwner || printerConnecting}
+                      className="p-3 bg-stone-950 hover:bg-stone-800 border border-stone-800 hover:border-amber-500/50 rounded-xl text-left transition cursor-pointer flex flex-col gap-1"
+                    >
+                      <div className="flex items-center gap-1.5 text-sky-400 font-bold">
+                        <Zap size={15} /> Serial / COM Port
+                      </div>
+                      <span className="text-[11px] text-stone-400">RS-232 & USB-to-UART serial adapters (9600/19200 baud)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleConnectHardware("webbluetooth")}
+                      disabled={!isOwner || printerConnecting}
+                      className="p-3 bg-stone-950 hover:bg-stone-800 border border-stone-800 hover:border-amber-500/50 rounded-xl text-left transition cursor-pointer flex flex-col gap-1"
+                    >
+                      <div className="flex items-center gap-1.5 text-purple-400 font-bold">
+                        <Bluetooth size={15} /> Wireless Bluetooth
+                      </div>
+                      <span className="text-[11px] text-stone-400">Portable belt & tablet 58mm mini printers</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Hardware Preferences & Toggles */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-stone-400 block mb-1 font-semibold">Thermal Paper Width</label>
@@ -443,23 +609,71 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
                     disabled={!isOwner}
                     className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 text-xs focus:outline-none focus:border-amber-500 font-mono"
                   >
-                    <option value="80mm">80mm Standard POS Printer</option>
-                    <option value="58mm">58mm Compact Mobile Printer</option>
+                    <option value="80mm">80mm Standard POS Printer (48 Chars/Line)</option>
+                    <option value="58mm">58mm Compact Mobile Printer (32 Chars/Line)</option>
                   </select>
                 </div>
 
-                <div className="flex flex-col justify-end">
-                  <label className="flex items-center gap-2 bg-stone-950 p-2.5 rounded-xl border border-stone-800 text-stone-300">
-                    <input
-                      type="checkbox"
-                      checked={form.autoPrintAfterPayment}
-                      onChange={(e) => handleChange("autoPrintAfterPayment", e.target.checked)}
-                      disabled={!isOwner}
-                      className="w-4 h-4 accent-amber-500"
-                    />
-                    <span>Auto-trigger print after payment success</span>
-                  </label>
+                <div>
+                  <label className="text-stone-400 block mb-1 font-semibold">Serial COM Baud Rate</label>
+                  <select
+                    value={form.printerBaudRate || 9600}
+                    onChange={(e) => handleChange("printerBaudRate", Number(e.target.value))}
+                    disabled={!isOwner}
+                    className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 text-xs focus:outline-none focus:border-amber-500 font-mono"
+                  >
+                    <option value={9600}>9600 bps (Standard Thermal)</option>
+                    <option value={19200}>19200 bps (High Speed)</option>
+                    <option value={38400}>38400 bps</option>
+                    <option value={115200}>115200 bps (Ultra High Speed)</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center gap-2.5 bg-stone-950 p-2.5 rounded-xl border border-stone-800 text-stone-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.kickDrawerOnCash ?? true}
+                    onChange={(e) => handleChange("kickDrawerOnCash", e.target.checked)}
+                    disabled={!isOwner}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <span>Auto-kick RJ11 Cash Drawer on Cash settlement</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 bg-stone-950 p-2.5 rounded-xl border border-stone-800 text-stone-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.autoCutPaper ?? true}
+                    onChange={(e) => handleChange("autoCutPaper", e.target.checked)}
+                    disabled={!isOwner}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <span>Send hardware guillotine paper cut command</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 bg-stone-950 p-2.5 rounded-xl border border-stone-800 text-stone-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.buzzerOnKOT ?? true}
+                    onChange={(e) => handleChange("buzzerOnKOT", e.target.checked)}
+                    disabled={!isOwner}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <span>Audible buzzer beep on Kitchen Order Tickets</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 bg-stone-950 p-2.5 rounded-xl border border-stone-800 text-stone-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.autoPrintAfterPayment ?? false}
+                    onChange={(e) => handleChange("autoPrintAfterPayment", e.target.checked)}
+                    disabled={!isOwner}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <span>Auto-print receipt immediately upon payment</span>
+                </label>
               </div>
 
               <div>
@@ -471,6 +685,22 @@ export default function SettingsView({ state = {}, dispatch, currentUser, onNavi
                   disabled={!isOwner}
                   className="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-stone-100 text-xs focus:outline-none focus:border-amber-500"
                 />
+              </div>
+
+              {/* Silent Kiosk Printing Tip */}
+              <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 text-stone-400 space-y-1">
+                <span className="text-amber-400 font-bold block flex items-center gap-1.5">
+                  💡 Zero-Dialog Silent Kiosk Printing for Windows POS Terminals
+                </span>
+                <p className="text-[11px] leading-relaxed">
+                  If using a standard Windows printer driver, you can completely bypass the browser print dialog by starting Chrome/Edge in Kiosk mode:
+                </p>
+                <code className="block bg-stone-900 px-3 py-1.5 rounded-lg text-stone-200 font-mono text-[10px]">
+                  chrome.exe --kiosk --kiosk-printing http://localhost:5173
+                </code>
+                <p className="text-[10px] text-stone-500">
+                  This sends all print commands immediately to your default thermal printer with zero popup prompts.
+                </p>
               </div>
             </div>
           )}
