@@ -11,11 +11,14 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom"],
-          "vendor-supabase": ["@supabase/supabase-js"],
-          "vendor-charts": ["recharts"],
-          "vendor-icons": ["lucide-react"],
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("react-dom") || id.includes("scheduler")) return "vendor-react";
+            if (id.includes("@supabase")) return "vendor-supabase";
+            if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+            if (id.includes("lucide-react")) return "vendor-icons";
+            if (id.includes("react")) return "vendor-react";
+          }
         },
       },
     },
