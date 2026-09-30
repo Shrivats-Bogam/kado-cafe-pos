@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   Coffee, LayoutDashboard, ChefHat, Package, Menu as MenuIcon,
   Users, Sparkles, BarChart3, Settings, LogOut, Lock, Calculator as CalculatorIcon, ShieldCheck
@@ -7,20 +7,21 @@ import {
 import LoginScreen from "../components/LoginScreen.jsx";
 import Calculator from "../components/Calculator.jsx";
 import Toaster, { useToaster } from "../components/Toaster.jsx";
-import Dashboard from "../views/Dashboard.jsx";
-import TablesView from "../views/TablesView.jsx";
-import TableOrderScreen from "../views/TableOrderScreen.jsx";
-import KitchenView from "../views/KitchenView.jsx";
-import ParcelView from "../views/ParcelView.jsx";
-import MenuManageView from "../views/MenuManageView.jsx";
-import CustomersView from "../views/CustomersView.jsx";
-import ReportsView from "../views/ReportsView.jsx";
-import EmployeesView from "../views/EmployeesView.jsx";
-import InventoryView from "../views/InventoryView.jsx";
-import AIInsightsView from "../views/AIInsightsView.jsx";
-import SettingsPanel from "../views/SettingsPanel.jsx";
-import SettingsView from "../views/SettingsView.jsx";
-import TableQRModal from "../views/TableQRModal.jsx";
+
+const Dashboard = lazy(() => import("../views/Dashboard.jsx"));
+const TablesView = lazy(() => import("../views/TablesView.jsx"));
+const TableOrderScreen = lazy(() => import("../views/TableOrderScreen.jsx"));
+const KitchenView = lazy(() => import("../views/KitchenView.jsx"));
+const ParcelView = lazy(() => import("../views/ParcelView.jsx"));
+const MenuManageView = lazy(() => import("../views/MenuManageView.jsx"));
+const CustomersView = lazy(() => import("../views/CustomersView.jsx"));
+const ReportsView = lazy(() => import("../views/ReportsView.jsx"));
+const EmployeesView = lazy(() => import("../views/EmployeesView.jsx"));
+const InventoryView = lazy(() => import("../views/InventoryView.jsx"));
+const AIInsightsView = lazy(() => import("../views/AIInsightsView.jsx"));
+const SettingsPanel = lazy(() => import("../views/SettingsPanel.jsx"));
+const SettingsView = lazy(() => import("../views/SettingsView.jsx"));
+const TableQRModal = lazy(() => import("../views/TableQRModal.jsx"));
 
 import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth } from "../lib/storage.js";
 import { defaultState, ROLE_TABS } from "../data/defaults.js";
@@ -760,114 +761,120 @@ export default function StaffApp() {
 
         <div className="p-4 max-w-6xl mx-auto">
           <ErrorBoundary key={tab} name={tab.charAt(0).toUpperCase() + tab.slice(1)}>
-          {tab === "dashboard" && (
-            <Dashboard 
-              state={state} 
-              onNavigate={(targetTab) => setTab(targetTab)} 
-              currentUser={currentUser} 
-            />
-          )}
-          {tab === "tables" && (
-            <TablesView
-              tables={state.tables}
-              menuItems={state.menuItems}
-              onOpenTable={setOpenTableId}
-              onSetStatus={setTableStatus}
-              onShowQR={setQrTableId}
-              onTransferTable={transferTable}
-              onMergeTable={mergeTables}
-              onSplitTable={splitTable}
-              onReserveTable={reserveTable}
-              onSetCleaning={setTableCleaning}
-              onDuplicateOrder={duplicateTableOrder}
-              onAddTable={addTable}
-              onEditTable={editTable}
-              onDeleteTable={deleteTable}
-            />
-          )}
-          {tab === "kitchen" && (
-            <KitchenView
-              tables={state.tables}
-              parcels={state.parcels}
-              menuItems={state.menuItems}
-              onCycleKitchen={cycleKitchen}
-              onSetPriority={setTablePriority}
-              currentUser={currentUser}
-            />
-          )}
-          {tab === "parcel" && (
-            <ParcelView
-              parcels={state.parcels}
-              menuItems={state.menuItems}
-              onCreate={createParcel}
-              onUpdateStatus={updateParcelStatus}
-              onDelete={deleteParcel}
-            />
-          )}
-          {tab === "menu" && (
-            <MenuManageView
-              menuItems={state.menuItems}
-              categories={state.categories}
-              onAdd={addMenuItem}
-              onEdit={editMenuItem}
-              onDelete={deleteMenuItem}
-              onDuplicate={duplicateMenuItem}
-              onReorderItems={reorderMenuItems}
-              onAddCategory={addCategory}
-              onEditCategory={editCategory}
-              onDeleteCategory={deleteCategory}
-              onReorderCategories={reorderCategories}
-            />
-          )}
-          {tab === "inventory" && (
-            <InventoryView
-              inventory={state.inventory}
-              recipes={state.recipes}
-              inventoryLogs={state.inventoryLogs}
-              menuItems={state.menuItems}
-              onAddInventory={(item) => update(s => actions.addInventoryItem(s, item))}
-              onEditInventory={(id, patch) => update(s => actions.editInventoryItem(s, id, patch))}
-              onDeleteInventory={(id) => update(s => actions.deleteInventoryItem(s, id))}
-              onSaveRecipe={(menuItemId, ingredients) => update(s => actions.saveRecipe(s, menuItemId, ingredients))}
-              onAddPurchase={(purchaseData) => update(s => actions.addPurchaseEntry(s, purchaseData))}
-              onAdjustStock={(adjustmentData) => update(s => actions.adjustStock(s, adjustmentData))}
-            />
-          )}
-          {tab === "customers" && (
-            <CustomersView
-              customers={state.customers}
-              orderHistory={state.orderHistory}
-              menuItems={state.menuItems}
-              onAdd={addCustomer}
-              onDelete={deleteCustomer}
-            />
-          )}
-          {tab === "insights" && (
-            <AIInsightsView 
-              state={state} 
-              orderHistory={state.orderHistory} 
-              menuItems={state.menuItems} 
-              onNavigate={(targetTab) => setTab(targetTab)} 
-            />
-          )}
-          {tab === "reports" && (
-            <ReportsView state={state} />
-          )}
-          {tab === "employees" && (
-            <EmployeesView
-              state={state}
-              dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
-              currentUser={currentUser}
-            />
-          )}
-          {tab === "settings" && (
-            <SettingsView
-              state={state}
-              dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
-              currentUser={currentUser}
-              onNavigate={(targetTab) => setTab(targetTab)}
-            />
-          )}
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-64 p-10 text-stone-400">
+                Loading…
+              </div>
+            }>
+              {tab === "dashboard" && (
+                <Dashboard 
+                  state={state} 
+                  onNavigate={(targetTab) => setTab(targetTab)} 
+                  currentUser={currentUser} 
+                />
+              )}
+              {tab === "tables" && (
+                <TablesView
+                  tables={state.tables}
+                  menuItems={state.menuItems}
+                  onOpenTable={setOpenTableId}
+                  onSetStatus={setTableStatus}
+                  onShowQR={setQrTableId}
+                  onTransferTable={transferTable}
+                  onMergeTable={mergeTables}
+                  onSplitTable={splitTable}
+                  onReserveTable={reserveTable}
+                  onSetCleaning={setTableCleaning}
+                  onDuplicateOrder={duplicateTableOrder}
+                  onAddTable={addTable}
+                  onEditTable={editTable}
+                  onDeleteTable={deleteTable}
+                />
+              )}
+              {tab === "kitchen" && (
+                <KitchenView
+                  tables={state.tables}
+                  parcels={state.parcels}
+                  menuItems={state.menuItems}
+                  onCycleKitchen={cycleKitchen}
+                  onSetPriority={setTablePriority}
+                  currentUser={currentUser}
+                />
+              )}
+              {tab === "parcel" && (
+                <ParcelView
+                  parcels={state.parcels}
+                  menuItems={state.menuItems}
+                  onCreate={createParcel}
+                  onUpdateStatus={updateParcelStatus}
+                  onDelete={deleteParcel}
+                />
+              )}
+              {tab === "menu" && (
+                <MenuManageView
+                  menuItems={state.menuItems}
+                  categories={state.categories}
+                  onAdd={addMenuItem}
+                  onEdit={editMenuItem}
+                  onDelete={deleteMenuItem}
+                  onDuplicate={duplicateMenuItem}
+                  onReorderItems={reorderMenuItems}
+                  onAddCategory={addCategory}
+                  onEditCategory={editCategory}
+                  onDeleteCategory={deleteCategory}
+                  onReorderCategories={reorderCategories}
+                />
+              )}
+              {tab === "inventory" && (
+                <InventoryView
+                  inventory={state.inventory}
+                  recipes={state.recipes}
+                  inventoryLogs={state.inventoryLogs}
+                  menuItems={state.menuItems}
+                  onAddInventory={(item) => update(s => actions.addInventoryItem(s, item))}
+                  onEditInventory={(id, patch) => update(s => actions.editInventoryItem(s, id, patch))}
+                  onDeleteInventory={(id) => update(s => actions.deleteInventoryItem(s, id))}
+                  onSaveRecipe={(menuItemId, ingredients) => update(s => actions.saveRecipe(s, menuItemId, ingredients))}
+                  onAddPurchase={(purchaseData) => update(s => actions.addPurchaseEntry(s, purchaseData))}
+                  onAdjustStock={(adjustmentData) => update(s => actions.adjustStock(s, adjustmentData))}
+                />
+              )}
+              {tab === "customers" && (
+                <CustomersView
+                  customers={state.customers}
+                  orderHistory={state.orderHistory}
+                  menuItems={state.menuItems}
+                  onAdd={addCustomer}
+                  onDelete={deleteCustomer}
+                />
+              )}
+              {tab === "insights" && (
+                <AIInsightsView 
+                  state={state} 
+                  orderHistory={state.orderHistory} 
+                  menuItems={state.menuItems} 
+                  onNavigate={(targetTab) => setTab(targetTab)} 
+                />
+              )}
+              {tab === "reports" && (
+                <ReportsView state={state} />
+              )}
+              {tab === "employees" && (
+                <EmployeesView
+                  state={state}
+                  dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
+                  currentUser={currentUser}
+                />
+              )}
+              {tab === "settings" && (
+                <SettingsView
+                  state={state}
+                  dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
+                  currentUser={currentUser}
+                  onNavigate={(targetTab) => setTab(targetTab)}
+                />
+              )}
+            </Suspense>
           </ErrorBoundary>
         </div>
       </div>
@@ -952,40 +959,48 @@ export default function StaffApp() {
       </button>
 
       {openTable && (
-        <TableOrderScreen
-          table={openTable}
-          tables={state.tables}
-          menuItems={state.menuItems}
-          customers={state.customers}
-          currentUser={currentUser}
-          onClose={() => setOpenTableId(null)}
-          onSave={(cart, customerName, opts) => saveTableOrder(openTable.id, cart, customerName, opts)}
-          onGenerateBill={(cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown) =>
-            generateBillForTable(openTable.id, cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown)
-          }
-          onSetStatus={(status) => setTableStatus(openTable.id, status)}
-          onDeleteTable={(tableId) => {
-            deleteTable(tableId);
-            setOpenTableId(null);
-          }}
-          onTransferTable={(fromId, toId) => transferTable(fromId, toId)}
-          onMergeTable={(sourceId, targetId) => mergeTables(sourceId, targetId)}
-          onSplitTable={(sourceId, targetId, items) => splitTable(sourceId, targetId, items)}
-        />
+        <Suspense fallback={<div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center text-stone-300">Loading…</div>}>
+          <TableOrderScreen
+            table={openTable}
+            tables={state.tables}
+            menuItems={state.menuItems}
+            customers={state.customers}
+            currentUser={currentUser}
+            onClose={() => setOpenTableId(null)}
+            onSave={(cart, customerName, opts) => saveTableOrder(openTable.id, cart, customerName, opts)}
+            onGenerateBill={(cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown) =>
+              generateBillForTable(openTable.id, cart, customerName, totals, paymentMode, phone, redeemedPoints, splitBreakdown)
+            }
+            onSetStatus={(status) => setTableStatus(openTable.id, status)}
+            onDeleteTable={(tableId) => {
+              deleteTable(tableId);
+              setOpenTableId(null);
+            }}
+            onTransferTable={(fromId, toId) => transferTable(fromId, toId)}
+            onMergeTable={(sourceId, targetId) => mergeTables(sourceId, targetId)}
+            onSplitTable={(sourceId, targetId, items) => splitTable(sourceId, targetId, items)}
+          />
+        </Suspense>
       )}
-      {qrTable && <TableQRModal table={qrTable} onClose={() => setQrTableId(null)} />}
+      {qrTable && (
+        <Suspense fallback={null}>
+          <TableQRModal table={qrTable} onClose={() => setQrTableId(null)} />
+        </Suspense>
+      )}
       {showCalc && <Calculator onClose={() => setShowCalc(false)} />}
       {showSettings && (
-        <SettingsPanel
-          state={state}
-          dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
-          users={state.users}
-          onAddUser={addUser}
-          onRemoveUser={removeUser}
-          onClose={() => setShowSettings(false)}
-          currentUser={currentUser}
-          onNavigate={(targetTab) => setTab(targetTab)}
-        />
+        <Suspense fallback={null}>
+          <SettingsPanel
+            state={state}
+            dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
+            users={state.users}
+            onAddUser={addUser}
+            onRemoveUser={removeUser}
+            onClose={() => setShowSettings(false)}
+            currentUser={currentUser}
+            onNavigate={(targetTab) => setTab(targetTab)}
+          />
+        </Suspense>
       )}
 
       <Toaster toaster={toaster} />
