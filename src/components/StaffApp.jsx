@@ -64,6 +64,7 @@ export default function StaffApp() {
   const [connectionStatus, setConnectionStatus] = useState("connecting"); // "connected" | "reconnecting" | "offline"
   const skipNextSave = useRef(false);
   const prevKitchenStatuses = useRef({}); // for toast notifications on status changes
+  const lastVersionRef = useRef(null);
   const toaster = useToaster();
   const soundEnabled = loadUIState()?.soundEnabled !== false;
 
@@ -208,25 +209,23 @@ export default function StaffApp() {
             const json = await getState();
             if (!json) return;
             const incoming = { ...defaultState(), ...prev, ...JSON.parse(json) };
-            if (JSON.stringify(incoming) === JSON.stringify(prev)) return;
             skipNextSave.current = true;
             fireStatusToasts(prev, incoming, watched, toaster, soundEnabled);
             prevKitchenStatuses.current = snapshotStatuses(incoming);
             setStateRaw(incoming);
           } catch { /* transient */ }
         })();
-        return prev; // skip this render; the async setStateRaw above will trigger it
+        return prev;
       });
     };
 
     // Network online & offline event handlers
     const handleOnline = () => {
-      setConnectionStatus("reconnecting");
+      setConnectionStatus("connected");
       refetchAndApply();
     };
     const handleOffline = () => {
-      setConnectionStatus("offline");
-      setConnected(false);
+      setConnectionStatus("reconnecting");
     };
 
     window.addEventListener("online", handleOnline);
@@ -239,14 +238,17 @@ export default function StaffApp() {
 
     // Subscribe to realtime changes with active channel lifecycle status callback
     const unsub = subscribeToChanges(
-      (json) => {
+      (json, version) => {
         if (!json) return;
+        // Cheap version gate: ignore stale/duplicate broadcasts
+        if (version && lastVersionRef.current && version <= lastVersionRef.current) return;
+        if (version) lastVersionRef.current = version;
+
         setStateRaw((prev) => {
           if (!prev) return prev;
           let incoming;
           try { incoming = { ...defaultState(), ...prev, ...JSON.parse(json) }; }
           catch { return prev; }
-          if (JSON.stringify(incoming) === JSON.stringify(prev)) return prev;
           skipNextSave.current = true;
           fireStatusToasts(prev, incoming, watched, toaster, soundEnabled);
           prevKitchenStatuses.current = snapshotStatuses(incoming);
@@ -276,9 +278,6 @@ export default function StaffApp() {
       }
     }, 30000);
 
-    // Polling safety net fallback (60s)
-    const interval = setInterval(refetchAndApply, 60000);
-
     // Multi-tab storage sync for local mode (sub-10ms response when another tab updates localStorage)
     const handleStorageChange = (e) => {
       if ((e.key === LS_KEY || e.key === "kado-cafe-state") && e.newValue) {
@@ -289,7 +288,6 @@ export default function StaffApp() {
 
     return () => { 
       unsub && unsub(); 
-      clearInterval(interval); 
       clearInterval(heartbeatInterval);
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("online", handleOnline);

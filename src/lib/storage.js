@@ -309,7 +309,7 @@ export function setState(jsonString) {
       try {
         const existingArchiveRaw = localStorage.getItem("kado-cafe-archive") || "[]";
         const existingArchive = JSON.parse(existingArchiveRaw);
-        const olderOrders = (rawObj.orderHistory || []).slice(keepOrders);
+        const olderOrders = (rawObj.orderHistory || []).slice(0, Math.max(0, (rawObj.orderHistory || []).length - keepOrders));
         const mergedArchive = [...olderOrders, ...existingArchive].slice(0, 5000); // cap local archive at 5000
         localStorage.setItem("kado-cafe-archive", JSON.stringify(mergedArchive));
       } catch (err) {
@@ -319,7 +319,7 @@ export function setState(jsonString) {
 
     rawObj.archivedOrdersCount = (rawObj.archivedOrdersCount || 0) + Math.max(0, (rawObj.orderHistory?.length || 0) - keepOrders);
     rawObj.lastArchivedAt = new Date().toISOString();
-    rawObj.orderHistory = (rawObj.orderHistory || []).slice(0, keepOrders);
+    rawObj.orderHistory = (rawObj.orderHistory || []).slice(-keepOrders);
     rawObj.inventoryLogs = (rawObj.inventoryLogs || []).slice(0, keepLogs);
     rawObj.activityLogs = (rawObj.activityLogs || []).slice(0, keepActivity);
   }
@@ -356,6 +356,11 @@ export function setState(jsonString) {
           finalObj = tagWithVersion(mergeStates(versionedObj, remoteData.data));
         }
       } catch { /* proceed with direct save */ }
+
+      // Strip growing historical arrays from the hot cloud blob (after any merge)
+      delete finalObj.orderHistory;
+      delete finalObj.inventoryLogs;
+      delete finalObj.activityLogs;
 
       const { error: rpcErr } = await supabase.rpc("upsert_cafe_state", {
         p_cafe_id: CAFE_ID,
@@ -394,7 +399,7 @@ export function subscribeToChanges(onChange, onStatus) {
       (payload) => {
         const json = payload.new?.data ? JSON.stringify(payload.new.data) : null;
         if (json) lastFetched = json;
-        onChange(json);
+        onChange(json, payload.new?.updated_at || null);
       }
     )
     .subscribe((status) => {

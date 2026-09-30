@@ -1613,9 +1613,8 @@ export function archiveHistoricalData(state, options = {}) {
   const currentHistory = state.orderHistory || [];
   const currentInvLogs = state.inventoryLogs || [];
   const currentActivity = state.activityLogs || [];
-
-  const prunedHistory = currentHistory.slice(0, keepOrders);
-  const archivedOrders = currentHistory.slice(keepOrders);
+  const prunedHistory = currentHistory.slice(-keepOrders);
+  const archivedOrders = currentHistory.slice(0, Math.max(0, currentHistory.length - keepOrders));
 
   const prunedInvLogs = currentInvLogs.slice(0, keepLogs);
   const prunedActivity = currentActivity.slice(0, keepActivity);
