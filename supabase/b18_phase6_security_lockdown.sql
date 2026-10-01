@@ -8,10 +8,13 @@
 --   4. QR guest ordering uses security-definer rate-limited guest_place_order
 -- =====================================================================
 
+-- Set schema search path to include extensions (where pgcrypto lives in Supabase)
+set search_path = public, extensions;
+
 -- ---------------------------------------------------------------------
 -- Section A: Extensions, pos_orders ledger & staff_pins table
 -- ---------------------------------------------------------------------
-create extension if not exists pgcrypto;  -- for crypt() and gen_salt()
+create extension if not exists pgcrypto with schema extensions;
 
 -- A1: pos_orders ledger table (if not already created by b17)
 create table if not exists public.pos_orders (
@@ -55,10 +58,10 @@ alter table public.staff_pins enable row level security;
 -- Matches authoritative IDs in cafe_state.data.employees (emp_1 to emp_4)
 -- ---------------------------------------------------------------------
 insert into public.staff_pins (cafe_id, employee_id, pin_hash, role) values
-  ('kado-cafe', 'emp_1', crypt('1234', gen_salt('bf')), 'Owner'),
-  ('kado-cafe', 'emp_2', crypt('0000', gen_salt('bf')), 'Waiter'),
-  ('kado-cafe', 'emp_3', crypt('4321', gen_salt('bf')), 'Kitchen'),
-  ('kado-cafe', 'emp_4', crypt('9999', gen_salt('bf')), 'Staff')
+  ('kado-cafe', 'emp_1', extensions.crypt('1234', extensions.gen_salt('bf')), 'Owner'),
+  ('kado-cafe', 'emp_2', extensions.crypt('0000', extensions.gen_salt('bf')), 'Waiter'),
+  ('kado-cafe', 'emp_3', extensions.crypt('4321', extensions.gen_salt('bf')), 'Kitchen'),
+  ('kado-cafe', 'emp_4', extensions.crypt('9999', extensions.gen_salt('bf')), 'Staff')
 on conflict (cafe_id, employee_id) do update set
   pin_hash = excluded.pin_hash,
   role = excluded.role,
@@ -70,11 +73,11 @@ on conflict (cafe_id, employee_id) do update set
 -- ---------------------------------------------------------------------
 create or replace function public.verify_staff_pin(p_cafe_id text, p_employee_id text, p_pin text)
 returns table(ok boolean, role text, locked boolean)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   r record;
   max_attempts constant int := 5;
-  lock_minutes  constant int := 10;
+  lock_minutes constant int := 10;
 begin
   select * into r from public.staff_pins
    where cafe_id = p_cafe_id and employee_id = p_employee_id;
@@ -88,7 +91,7 @@ begin
     return query select false, r.role, true; return;
   end if;
 
-  if crypt(p_pin, r.pin_hash) = r.pin_hash then
+  if extensions.crypt(p_pin, r.pin_hash) = r.pin_hash then
     update public.staff_pins
        set failed_count = 0, locked_until = null
      where cafe_id = p_cafe_id and employee_id = p_employee_id;
@@ -113,7 +116,7 @@ create or replace function public.upsert_cafe_state(
   p_pin     text default null
 )
 returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   pin_ok boolean;
 begin
@@ -122,7 +125,7 @@ begin
     select 1 from public.staff_pins s
      where s.cafe_id = p_cafe_id
        and (s.locked_until is null or s.locked_until <= now())
-       and crypt(coalesce(p_pin,''), s.pin_hash) = s.pin_hash
+       and extensions.crypt(coalesce(p_pin,''), s.pin_hash) = s.pin_hash
   ) into pin_ok;
 
   if not pin_ok then
@@ -143,14 +146,14 @@ create or replace function public.record_paid_order(
   p_cafe_id text, p_pin text, p_order jsonb
 )
 returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare pin_ok boolean;
 begin
   select exists (
     select 1 from public.staff_pins s
      where s.cafe_id = p_cafe_id
        and (s.locked_until is null or s.locked_until <= now())
-       and crypt(coalesce(p_pin,''), s.pin_hash) = s.pin_hash
+       and extensions.crypt(coalesce(p_pin,''), s.pin_hash) = s.pin_hash
   ) into pin_ok;
   if not pin_ok then raise exception 'REJECTED: valid staff PIN required'; end if;
 
@@ -176,14 +179,14 @@ create or replace function public.get_order_history(
   p_cafe_id text, p_pin text, p_limit int default 250
 )
 returns setof public.pos_orders
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare pin_ok boolean;
 begin
   select exists (
     select 1 from public.staff_pins s
      where s.cafe_id = p_cafe_id
        and (s.locked_until is null or s.locked_until <= now())
-       and crypt(coalesce(p_pin,''), s.pin_hash) = s.pin_hash
+       and extensions.crypt(coalesce(p_pin,''), s.pin_hash) = s.pin_hash
   ) into pin_ok;
   if not pin_ok then raise exception 'REJECTED: valid staff PIN required'; end if;
 
@@ -205,12 +208,10 @@ create or replace function public.guest_place_order(
   p_customer  text default 'Guest'
 )
 returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   st       jsonb;
   tables_j jsonb;
-  t        jsonb;
-  found    boolean := false;
   ticket   jsonb;
   last_ts  timestamptz;
 begin
@@ -260,7 +261,15 @@ end $$;
 -- ---------------------------------------------------------------------
 -- cafe_state: anon can READ (realtime + guest menu), NOT write
 alter table public.cafe_state enable row level security;
-drop policy if exists cafe_state_anon_read on public.cafe_state;
+
+do $$
+declare pol record;
+begin
+  for pol in select policyname from pg_policies where schemaname = 'public' and tablename = 'cafe_state' loop
+    execute format('drop policy if exists %I on public.cafe_state', pol.policyname);
+  end loop;
+end $$;
+
 create policy cafe_state_anon_read on public.cafe_state
   for select to anon, authenticated using (true);
 -- NO insert/update/delete policies for anon -> writes only via definer RPCs
