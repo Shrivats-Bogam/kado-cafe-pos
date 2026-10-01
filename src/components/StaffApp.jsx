@@ -25,7 +25,7 @@ const SettingsPanel = lazy(() => import("../views/SettingsPanel.jsx"));
 const SettingsView = lazy(() => import("../views/SettingsView.jsx"));
 const TableQRModal = lazy(() => import("../views/TableQRModal.jsx"));
 
-import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth, mirrorOrderToLedger, fetchOrderHistoryFromLedger, setSessionPin, clearSessionPin } from "../lib/storage.js";
+import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth, mirrorOrderToLedger, fetchOrderHistoryFromLedger, fetchOrderHistorySince, mergeOrderHistory, mirrorActivityToLedger, setSessionPin, clearSessionPin } from "../lib/storage.js";
 import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
@@ -155,6 +155,23 @@ export default function StaffApp() {
                   next.orderHistory = ledgerOrders;
                   skipNextSave.current = true;
                   setStateRaw((prev) => prev ? { ...prev, orderHistory: ledgerOrders } : prev);
+                }
+              } else {
+                // Sprint 3: Delta History Sync for returning devices
+                const existing = next.orderHistory || [];
+                let maxTime = 0;
+                for (const o of existing) {
+                  const ts = new Date(o.paidAt || o.createdAt || 0).getTime();
+                  if (!isNaN(ts) && ts > maxTime) maxTime = ts;
+                }
+                if (maxTime > 0) {
+                  const deltaOrders = await fetchOrderHistorySince(new Date(maxTime).toISOString(), 250);
+                  if (deltaOrders.length > 0) {
+                    const merged = mergeOrderHistory(existing, deltaOrders, 250);
+                    next.orderHistory = merged;
+                    skipNextSave.current = true;
+                    setStateRaw((prev) => prev ? { ...prev, orderHistory: merged } : prev);
+                  }
                 }
               }
             } else {
@@ -459,11 +476,13 @@ export default function StaffApp() {
     setCloudSession(session);
     setCurrentUser(authenticatedCloudUser);
 
-    update((s) => actions.recordActivityLog(s, {
+    const cloudLog = {
       employeeName: authenticatedCloudUser.name,
       action: "Logged into POS via Cloud Auth",
       module: "Auth"
-    }));
+    };
+    update((s) => actions.recordActivityLog(s, cloudLog));
+    mirrorActivityToLedger(cloudLog);
 
     return authenticatedCloudUser;
   };
@@ -520,14 +539,32 @@ export default function StaffApp() {
                 skipNextSave.current = true;
                 setStateRaw((prev) => prev ? { ...prev, orderHistory: ledgerOrders } : prev);
               }
+            } else {
+              // Sprint 3: Delta History Sync for active/stale terminals
+              const existing = state.orderHistory || [];
+              let maxTime = 0;
+              for (const o of existing) {
+                const ts = new Date(o.paidAt || o.createdAt || 0).getTime();
+                if (!isNaN(ts) && ts > maxTime) maxTime = ts;
+              }
+              if (maxTime > 0) {
+                const deltaOrders = await fetchOrderHistorySince(new Date(maxTime).toISOString(), 250);
+                if (deltaOrders.length > 0) {
+                  const merged = mergeOrderHistory(existing, deltaOrders, 250);
+                  skipNextSave.current = true;
+                  setStateRaw((prev) => prev ? { ...prev, orderHistory: merged } : prev);
+                }
+              }
             }
 
-            // Record login activity
-            update((s) => actions.recordActivityLog(s, {
+            // Record login activity & mirror to cloud ledger
+            const shiftLog = {
               employeeName: authenticatedUser.name,
               action: `Staff shift active: ${authenticatedUser.name} (${authenticatedUser.role})`,
               module: "Auth"
-            }));
+            };
+            update((s) => actions.recordActivityLog(s, shiftLog));
+            mirrorActivityToLedger(shiftLog);
           }}
           onCloudLogin={handleCloudLogin}
         />
@@ -626,6 +663,14 @@ export default function StaffApp() {
     }
 
     update((s) => actions.refundOrder(s, orderId, refundAmount, reason, staffRole, serverTxResult));
+    const refundLog = {
+      employeeName: currentUser?.name || "Staff",
+      action: `Refund processed: ₹${refundAmount} for order ${orderId}`,
+      module: "Billing",
+      details: reason
+    };
+    update((s) => actions.recordActivityLog(s, refundLog));
+    mirrorActivityToLedger(refundLog);
     return serverTxResult;
   };
 

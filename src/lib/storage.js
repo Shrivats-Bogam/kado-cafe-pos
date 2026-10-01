@@ -646,6 +646,96 @@ export function fetchActivityLogs(state, { module, employee, from, to, search } 
   return logs; // already newest-first from recordActivityLog
 }
 
+// === Sprint 3: Delta History Sync ===
+
+export function mergeOrderHistory(existingOrders = [], deltaOrders = [], maxCap = 250) {
+  const orderMap = new Map();
+  for (const o of (existingOrders || [])) {
+    if (o && o.id) orderMap.set(o.id, o);
+  }
+  for (const d of (deltaOrders || [])) {
+    if (d && d.id) orderMap.set(d.id, d);
+  }
+  return Array.from(orderMap.values())
+    .sort((a, b) => {
+      const tA = new Date(a.createdAt || a.paidAt || 0).getTime();
+      const tB = new Date(b.createdAt || b.paidAt || 0).getTime();
+      return tA - tB;
+    })
+    .slice(-maxCap);
+}
+
+export async function fetchOrderHistorySince(sinceTimestamp, limit = 250) {
+  if (IS_E2E || !useSupabase || !supabase || !sinceTimestamp) return [];
+  if (!sessionPin) return [];
+  try {
+    const { data, error } = await supabase.rpc("get_order_history_since", {
+      p_cafe_id: CAFE_ID,
+      p_pin: sessionPin,
+      p_since: new Date(sinceTimestamp).toISOString(),
+      p_limit: limit,
+    });
+    if (error) {
+      console.warn("[kado-cafe] delta order history fetch failed:", error);
+      return [];
+    }
+    return (data || []).map(rowToOrderRecord).reverse(); // oldest→newest
+  } catch {
+    return [];
+  }
+}
+
+// === Sprint 4: Cloud Activity Ledger (v2) ===
+
+export async function mirrorActivityToLedger(entry) {
+  if (IS_E2E || !useSupabase || !supabase || !entry) return;
+  try {
+    const { error } = await supabase.rpc("record_activity", {
+      p_cafe_id: CAFE_ID,
+      p_employee_name: entry.employeeName || "System User",
+      p_action: entry.action || "Action",
+      p_module: entry.module || "System",
+      p_details: entry.details || null,
+      p_id: entry.id || null,
+    });
+    if (error) console.warn("[kado-cafe] activity ledger mirror failed:", error);
+  } catch (e) {
+    console.warn("[kado-cafe] activity ledger mirror error:", e);
+  }
+}
+
+export async function fetchActivityLogsFromLedger({ module, employee, from, to, search, limit = 200 } = {}) {
+  if (IS_E2E || !useSupabase || !supabase) return [];
+  if (!sessionPin) return [];
+  try {
+    const { data, error } = await supabase.rpc("get_activity_log", {
+      p_cafe_id: CAFE_ID,
+      p_pin: sessionPin,
+      p_module: module || null,
+      p_employee: employee || null,
+      p_from: from ? new Date(from).toISOString() : null,
+      p_to: to ? new Date(to).toISOString() : null,
+      p_search: search || null,
+      p_limit: limit,
+    });
+    if (error) {
+      console.warn("[kado-cafe] cloud activity log fetch failed:", error);
+      return [];
+    }
+    return (data || []).map((row) => ({
+      id: row.id,
+      employeeName: row.employee_name,
+      action: row.action,
+      module: row.module,
+      details: row.details,
+      timestamp: row.timestamp,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+
 
 
 

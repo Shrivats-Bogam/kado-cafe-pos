@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
-import { ScrollText, ShieldAlert } from "lucide-react";
-import { fetchActivityLogs } from "../lib/storage.js";
+import React, { useMemo, useState, useEffect } from "react";
+import { ScrollText, ShieldAlert, Cloud, RefreshCw } from "lucide-react";
+import { fetchActivityLogs, fetchActivityLogsFromLedger, isCloudEnabled } from "../lib/storage.js";
 
 const PAGE_SIZE = 100;
 
@@ -33,6 +33,8 @@ export default function ActivityLogView({ state, currentUser }) {
   const [to, setTo] = useState("");
   const [search, setSearch] = useState("");
   const [shown, setShown] = useState(PAGE_SIZE);
+  const [cloudLogs, setCloudLogs] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const allLogs = state?.activityLogs || [];
 
@@ -45,7 +47,7 @@ export default function ActivityLogView({ state, currentUser }) {
     [allLogs]
   );
 
-  const filtered = useMemo(
+  const localFiltered = useMemo(
     () =>
       fetchActivityLogs(state, {
         module: module || undefined,
@@ -58,16 +60,62 @@ export default function ActivityLogView({ state, currentUser }) {
     [state, module, employee, from, to, search]
   );
 
-  const visible = filtered.slice(0, shown);
+  const loadCloudLogs = () => {
+    if (isCloudEnabled && currentUser?.role === "Owner") {
+      setIsRefreshing(true);
+      fetchActivityLogsFromLedger({
+        module: module || undefined,
+        employee: employee || undefined,
+        from: from ? new Date(from).toISOString() : undefined,
+        to: to ? new Date(to + "T23:59:59.999").toISOString() : undefined,
+        search: search || undefined,
+        limit: 500,
+      })
+        .then((rows) => {
+          if (rows && rows.length > 0) {
+            setCloudLogs(rows);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setIsRefreshing(false);
+        });
+    }
+  };
+
+  useEffect(() => {
+    loadCloudLogs();
+  }, [module, employee, from, to, search, currentUser]);
+
+  const activeLogSource = cloudLogs !== null ? cloudLogs : localFiltered;
+  const visible = activeLogSource.slice(0, shown);
   const inputCls =
     "rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-400";
 
   return (
     <div className="p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <ScrollText className="h-5 w-5 text-stone-400" />
-        <h2 className="text-lg font-semibold text-stone-100">Activity Log</h2>
-        <span className="text-sm text-stone-400">({filtered.length} entries)</span>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ScrollText className="h-5 w-5 text-stone-400" />
+          <h2 className="text-lg font-semibold text-stone-100">Activity Log</h2>
+          <span className="text-sm text-stone-400">({activeLogSource.length} entries)</span>
+          {cloudLogs !== null && (
+            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <Cloud size={12} /> Cloud Ledger
+            </span>
+          )}
+        </div>
+        {isCloudEnabled && (
+          <button
+            onClick={loadCloudLogs}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-stone-400 hover:text-stone-200 bg-stone-900 border border-stone-800 rounded-lg hover:bg-stone-800 transition cursor-pointer"
+            title="Refresh logs from cloud ledger"
+          >
+            <RefreshCw size={12} className={isRefreshing ? "animate-spin text-amber-500" : ""} />
+            <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -114,12 +162,12 @@ export default function ActivityLogView({ state, currentUser }) {
         )}
       </div>
 
-      {filtered.length > shown && (
+      {activeLogSource.length > shown && (
         <button
           onClick={() => setShown((s) => s + PAGE_SIZE)}
           className="mt-3 w-full rounded-lg border border-stone-200 bg-white py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
         >
-          Show more ({filtered.length - shown} remaining)
+          Show more ({activeLogSource.length - shown} remaining)
         </button>
       )}
     </div>
