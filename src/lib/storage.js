@@ -370,6 +370,14 @@ export function setState(jsonString) {
       delete finalObj.inventoryLogs;
       delete finalObj.activityLogs;
 
+      // Phase 6: Scrub plaintext PINs from cloud state (PINs live securely in staff_pins)
+      if (Array.isArray(finalObj.employees)) {
+        finalObj.employees = finalObj.employees.map(({ pin, ...rest }) => rest);
+      }
+      if (Array.isArray(finalObj.users)) {
+        finalObj.users = finalObj.users.map(({ pin, ...rest }) => rest);
+      }
+
       const { error: rpcErr } = await supabase.rpc("upsert_cafe_state", {
         p_cafe_id: CAFE_ID,
         p_data: finalObj,
