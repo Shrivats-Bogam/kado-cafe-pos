@@ -1225,7 +1225,7 @@ export function addEmployee(state, employeeData) {
     }
   }
 
-  const id = makeId("emp");
+  const id = employeeData.id || makeId("emp");
   const count = employees.length + 101;
   const newEmp = {
     id,

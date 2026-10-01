@@ -586,4 +586,47 @@ export async function verifyStaffPinRpc(employeeId, pin) {
   return { ok: Boolean(row?.ok), role: row?.role || null, locked: Boolean(row?.locked) };
 }
 
+// === Sprint 1: PIN Self-Service & Admin Lifecycle RPCs ===
+
+export async function updateMyPin(employeeId, oldPin, newPin) {
+  if (IS_E2E || !useSupabase || !supabase) {
+    setSessionPin(newPin);
+    return true;
+  }
+  const { data, error } = await supabase.rpc("update_my_pin", {
+    p_cafe_id: CAFE_ID,
+    p_employee_id: employeeId,
+    p_old_pin: oldPin,
+    p_new_pin: newPin,
+  });
+  if (error) throw error;
+  setSessionPin(newPin);
+  return data;
+}
+
+export async function adminSetEmployeePin(employeeId, newPin, role = "Staff") {
+  if (IS_E2E || !useSupabase || !supabase) return;
+  if (!sessionPin) throw new Error("Owner session PIN required");
+  const { error } = await supabase.rpc("admin_set_employee_pin", {
+    p_cafe_id: CAFE_ID,
+    p_owner_pin: sessionPin,
+    p_employee_id: employeeId,
+    p_new_pin: newPin,
+    p_role: role,
+  });
+  if (error) throw error;
+}
+
+export async function adminRemoveEmployeePin(employeeId) {
+  if (IS_E2E || !useSupabase || !supabase) return;
+  if (!sessionPin) throw new Error("Owner session PIN required");
+  const { error } = await supabase.rpc("admin_remove_employee_pin", {
+    p_cafe_id: CAFE_ID,
+    p_owner_pin: sessionPin,
+    p_employee_id: employeeId,
+  });
+  if (error) throw error;
+}
+
+
 

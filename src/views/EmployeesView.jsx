@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Users, Shield, Clock, Activity } from "lucide-react";
 import { useToaster } from "../components/Toaster.jsx";
-import { getSupabaseClient, isCloudEnabled } from "../lib/storage.js";
+import { getSupabaseClient, isCloudEnabled, adminSetEmployeePin, adminRemoveEmployeePin } from "../lib/storage.js";
 import { manageEmployeeCloud } from "../lib/auth.js";
 
 import { EmployeeDashboard } from "../components/EmployeeDashboard.jsx";
@@ -75,13 +75,29 @@ export default function EmployeesView({ state, dispatch, currentUser }) {
           ...empData,
           ...(cloudResult?.user_id ? { user_id: cloudResult.user_id } : {})
         });
+        if (empData.pin && isCloudEnabled) {
+          try {
+            await adminSetEmployeePin(empData.id, String(empData.pin).trim(), empData.role || "Staff");
+          } catch (pinErr) {
+            console.warn("[kado-cafe] adminSetEmployeePin notice:", pinErr.message);
+          }
+        }
         toaster.push("Employee updated successfully.", "success");
       } else {
+        const targetId = empData.id || `emp_${Date.now()}`;
         dispatch("addEmployee", {
           ...empData,
+          id: targetId,
           ...(cloudResult?.user_id ? { user_id: cloudResult.user_id } : {}),
           ...(cloudResult?.member_id ? { member_id: cloudResult.member_id } : {})
         });
+        if (empData.pin && isCloudEnabled) {
+          try {
+            await adminSetEmployeePin(targetId, String(empData.pin).trim(), empData.role || "Staff");
+          } catch (pinErr) {
+            console.warn("[kado-cafe] adminSetEmployeePin notice:", pinErr.message);
+          }
+        }
         if (empData.email && cloudResult?.invite_sent) {
           toaster.push(`Employee added. Invitation sent to ${empData.email}`, "success");
         } else {
@@ -107,6 +123,23 @@ export default function EmployeesView({ state, dispatch, currentUser }) {
           });
         } catch (cloudErr) {
           console.warn("[kado-cafe] Cloud status sync notice:", cloudErr.message);
+        }
+      }
+
+      // If disabling employee, remove PIN from staff_pins; if enabling, re-register PIN
+      if (targetEmp && isCloudEnabled) {
+        if (targetEmp.status === "active") {
+          try {
+            await adminRemoveEmployeePin(empId);
+          } catch (pinErr) {
+            console.warn("[kado-cafe] adminRemoveEmployeePin notice:", pinErr.message);
+          }
+        } else if (targetEmp.pin) {
+          try {
+            await adminSetEmployeePin(empId, String(targetEmp.pin).trim(), targetEmp.role || "Staff");
+          } catch (pinErr) {
+            console.warn("[kado-cafe] adminSetEmployeePin notice:", pinErr.message);
+          }
         }
       }
 

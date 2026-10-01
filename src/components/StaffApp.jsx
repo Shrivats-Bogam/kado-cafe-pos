@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   Coffee, LayoutDashboard, ChefHat, Package, Menu as MenuIcon,
-  Users, Sparkles, BarChart3, Settings, LogOut, Lock, Calculator as CalculatorIcon, ShieldCheck
+  Users, Sparkles, BarChart3, Settings, LogOut, Lock, Calculator as CalculatorIcon, ShieldCheck, KeyRound
 } from "lucide-react";
 
 import LoginScreen from "../components/LoginScreen.jsx";
 import Calculator from "../components/Calculator.jsx";
 import Toaster, { useToaster } from "../components/Toaster.jsx";
+import ChangePinModal from "../components/ChangePinModal.jsx";
 
 const Dashboard = lazy(() => import("../views/Dashboard.jsx"));
 const TablesView = lazy(() => import("../views/TablesView.jsx"));
@@ -58,6 +59,7 @@ export default function StaffApp() {
   const [qrTableId, setQrTableId] = useState(null);
   const [showCalc, setShowCalc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showChangePin, setShowChangePin] = useState(false);
   const [showMobileMore, setShowMobileMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -742,6 +744,13 @@ export default function StaffApp() {
             <span className="text-[10px] text-stone-500 uppercase font-semibold shrink-0">Lock</span>
           </button>
           <button
+            onClick={() => setShowChangePin(true)}
+            title="Change Your Security PIN"
+            className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-stone-400 hover:text-stone-100 hover:bg-stone-900 transition cursor-pointer"
+          >
+            <KeyRound size={13} /> Change PIN
+          </button>
+          <button
             onClick={logout}
             title="Sign out of Cloud Account on this device"
             className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-stone-500 hover:text-rose-400 transition cursor-pointer"
@@ -782,6 +791,9 @@ export default function StaffApp() {
                 <Settings size={15} />
               </button>
             )}
+            <button onClick={() => setShowChangePin(true)} title="Change My PIN" className="rounded-xl p-2 bg-stone-800 hover:bg-stone-700 text-stone-300">
+              <KeyRound size={15} />
+            </button>
             <button onClick={lockShift} title="Lock POS" className="rounded-xl p-2 bg-stone-800 hover:bg-stone-700 text-stone-300">
               <Lock size={15} />
             </button>
@@ -1033,6 +1045,18 @@ export default function StaffApp() {
             onNavigate={(targetTab) => setTab(targetTab)}
           />
         </Suspense>
+      )}
+
+      {showChangePin && (
+        <ChangePinModal
+          isOpen={showChangePin}
+          onClose={() => setShowChangePin(false)}
+          currentUser={currentUser}
+          onPinChanged={(newPin) => {
+            toaster.push("Security PIN updated.", "success");
+            setCurrentUser((prev) => (prev ? { ...prev, pin: newPin } : prev));
+          }}
+        />
       )}
 
       <Toaster toaster={toaster} />
