@@ -23,7 +23,7 @@ const SettingsPanel = lazy(() => import("../views/SettingsPanel.jsx"));
 const SettingsView = lazy(() => import("../views/SettingsView.jsx"));
 const TableQRModal = lazy(() => import("../views/TableQRModal.jsx"));
 
-import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth } from "../lib/storage.js";
+import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth, mirrorOrderToLedger, fetchOrderHistoryFromLedger } from "../lib/storage.js";
 import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
@@ -113,6 +113,15 @@ export default function StaffApp() {
         // 2. Load Application State first so employee roster is immediately available
         const json = await getState();
         const next = json ? { ...defaultState(), ...JSON.parse(json) } : defaultState();
+
+        // Cold-boot hydration: fresh device pulls history from pos_orders
+        if ((next.orderHistory || []).length === 0) {
+          const ledgerOrders = await fetchOrderHistoryFromLedger(250);
+          if (ledgerOrders.length > 0) {
+            next.orderHistory = ledgerOrders;
+            skipNextSave.current = true; // hydration alone must not trigger a cloud write
+          }
+        }
 
         // Snapshot current kitchen statuses so we don't fire a toast for already-existing orders
         prevKitchenStatuses.current = snapshotStatuses(next);
@@ -541,7 +550,15 @@ export default function StaffApp() {
       }
     }
 
-    update((s) => actions.generateBillForTable(s, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints, serverTxResult));
+    update((s) => {
+      const next = actions.generateBillForTable(s, tableId, items, customerName, totals, paymentMode, phone, redeemedPoints, serverTxResult);
+      // Mirror paid orders to pos_orders (idempotent upsert — safe if StrictMode double-invokes)
+      if (!isPending && serverTxResult?.success) {
+        const rec = (next.orderHistory || []).find((o) => o.id === serverTxResult.order_id);
+        if (rec) mirrorOrderToLedger(rec);
+      }
+      return next;
+    });
     return serverTxResult;
   };
 

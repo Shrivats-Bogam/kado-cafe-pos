@@ -153,6 +153,7 @@ export function generateBillForTable(state, tableId, items, customerName, totals
     customers,
     inventory: nextInventory,
     inventoryLogs: nextLogs,
+    // Local-only arrays (stripped from cloud blob to prevent unbounded growth and payload bloat)
     orders: [...(state.orders || []).filter(o => o.id !== billId), newOrderRecord],
     payments: newPaymentRecord ? [...(state.payments || []).filter(p => p.id !== newPaymentRecord.id), newPaymentRecord] : (state.payments || []),
     orderHistory: [...(state.orderHistory || []).filter(o => o.id !== billId), newOrderRecord],

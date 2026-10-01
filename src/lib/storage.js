@@ -359,6 +359,8 @@ export function setState(jsonString) {
 
       // Strip growing historical arrays from the hot cloud blob (after any merge)
       delete finalObj.orderHistory;
+      delete finalObj.orders;
+      delete finalObj.payments;
       delete finalObj.inventoryLogs;
       delete finalObj.activityLogs;
 
@@ -452,4 +454,76 @@ export async function checkConnectionHealth() {
     return { online: false, mode: "cloud", latencyMs: Date.now() - start, error: err.message || "Connection timeout" };
   }
 }
+
+// === LEDGER SEAMS (Phase 6 converts internals to RPC — nothing else changes) ===
+
+function orderRecordToRow(o) {
+  return {
+    id: o.id,
+    organization_id: CAFE_ID,
+    source: o.source || null,
+    customer_name: o.customerName || null,
+    customer_id: o.customerId || null,
+    items_json: o.items || [],
+    subtotal: o.subtotal ?? 0,
+    discount: o.discount ?? 0,
+    gst: o.gst ?? 0,
+    grand_total: o.grandTotal ?? 0,
+    points_redeemed: o.pointsRedeemed ?? 0,
+    payment_mode: o.paymentMode || null,
+    status: o.status || "Paid",
+    ledger_id: o.ledgerId || null,
+    paid_at: o.paidAt || null,
+    created_at: o.createdAt || new Date().toISOString(),
+  };
+}
+
+function rowToOrderRecord(r) {
+  return {
+    id: r.id,
+    source: r.source || "POS Order",
+    customerName: r.customer_name || "",
+    customerId: r.customer_id || null,
+    items: r.items_json || [],
+    subtotal: Number(r.subtotal) || 0,
+    discount: Number(r.discount) || 0,
+    gst: Number(r.gst) || 0,
+    grandTotal: Number(r.grand_total) || 0,
+    pointsRedeemed: Number(r.points_redeemed) || 0,
+    paymentMode: r.payment_mode || "Cash",
+    status: r.status || "Paid",
+    serverConfirmed: true,
+    ledgerId: r.ledger_id || null,
+    paidAt: r.paid_at || null,
+    createdAt: r.created_at,
+  };
+}
+
+// Fire-and-forget, idempotent (safe to call twice — e.g. StrictMode double-invoke)
+export async function mirrorOrderToLedger(orderRecord) {
+  if (IS_E2E || !useSupabase || !supabase || !orderRecord?.id) return;
+  try {
+    const { error } = await supabase
+      .from("pos_orders")
+      .upsert(orderRecordToRow(orderRecord), { onConflict: "id" });
+    if (error) console.warn("[kado-cafe] pos_orders mirror failed:", error);
+  } catch (e) {
+    console.warn("[kado-cafe] pos_orders mirror failed:", e);
+  }
+}
+
+export async function fetchOrderHistoryFromLedger(limit = 250) {
+  if (IS_E2E || !useSupabase || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("pos_orders")
+      .select("*")
+      .eq("organization_id", CAFE_ID)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) { console.warn("[kado-cafe] ledger hydration failed:", error); return []; }
+    return (data || []).map(rowToOrderRecord).reverse(); // oldest→newest, matches append order
+  } catch { return []; }
+}
+
 
