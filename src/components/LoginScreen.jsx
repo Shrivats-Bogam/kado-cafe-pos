@@ -3,6 +3,8 @@ import { Coffee, ArrowLeft, Delete, KeyRound, ShieldCheck, ShieldAlert, Lock, Al
 import { Pill, PrimaryButton } from "./ui.jsx";
 import { ROLE_LABELS } from "../data/defaults.js";
 import { verifyPin } from "../lib/pinSecurity.js";
+import { verifyStaffPinRpc, setSessionPin, isCloudEnabled } from "../lib/storage.js";
+import { IS_E2E } from "../lib/env.js";
 
 const LOCKOUT_KEY = "kado_pin_rate_limit";
 
@@ -63,50 +65,69 @@ export default function LoginScreen({
 
   const submitPin = async (fullPin) => {
     if (lockoutRemaining > 0) return;
+    if (!pickedUser) return;
 
-    const expectedPin = String(pickedUser?.pin || "");
-    const isMatch = pickedUser ? await verifyPin(fullPin, expectedPin) : false;
+    // Offline / E2E fallback: local check
+    if (IS_E2E || !isCloudEnabled) {
+      const isMatch = await verifyPin(fullPin, String(pickedUser?.pin || ""));
+      if (isMatch) {
+        saveStoredLockout({ attempts: 0, lockedUntil: 0 });
+        setSessionPin(fullPin);
+        onLogin(pickedUser, fullPin);
+      } else {
+        const stored = getStoredLockout();
+        const nextAttempts = (stored.attempts || 0) + 1;
+        let lockoutSec = 0;
+        if (nextAttempts >= 5) lockoutSec = 180;
+        else if (nextAttempts === 4) lockoutSec = 60;
+        else if (nextAttempts >= 3) lockoutSec = 30;
 
-    if (isMatch) {
-      // Successful authentication: reset rate limit tracking
-      saveStoredLockout({ attempts: 0, lockedUntil: 0 });
-      if (!hasCloudSession) {
-        setError("Cloud login required. Please sign in with your employee email and password to continue.");
-        setMode("cloud");
-        if (pickedUser.email) {
-          setEmail(pickedUser.email);
+        if (lockoutSec > 0) {
+          const lockedUntil = Date.now() + lockoutSec * 1000;
+          saveStoredLockout({ attempts: nextAttempts, lockedUntil });
+          setLockoutRemaining(lockoutSec);
+          setError(`Too many failed PIN attempts. Terminal locked for ${lockoutSec}s.`);
+        } else {
+          saveStoredLockout({ attempts: nextAttempts, lockedUntil: 0 });
+          const remainingAttempts = 3 - nextAttempts;
+          setError(`Wrong PIN (${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} remaining before lockout)`);
         }
+        setPin("");
+      }
+      return;
+    }
+
+    try {
+      // Server-side PIN verification (with server lockout)
+      const res = await verifyStaffPinRpc(pickedUser.id, fullPin);
+
+      if (res.locked) {
+        setError("Too many failed attempts. Account temporarily locked.");
+        setPin("");
         return;
       }
-      onLogin(pickedUser);
-    } else {
-      const stored = getStoredLockout();
-      const nextAttempts = (stored.attempts || 0) + 1;
-      let lockoutSec = 0;
-
-      // Exponential lockout policy:
-      // 3 attempts -> 30s lockout
-      // 4 attempts -> 60s lockout
-      // 5+ attempts -> 180s (3m) lockout
-      if (nextAttempts >= 5) {
-        lockoutSec = 180;
-      } else if (nextAttempts === 4) {
-        lockoutSec = 60;
-      } else if (nextAttempts >= 3) {
-        lockoutSec = 30;
+      if (!res.ok) {
+        setError("Invalid PIN.");
+        setPin("");
+        return;
       }
 
-      if (lockoutSec > 0) {
-        const lockedUntil = Date.now() + lockoutSec * 1000;
-        saveStoredLockout({ attempts: nextAttempts, lockedUntil });
-        setLockoutRemaining(lockoutSec);
-        setError(`Too many failed PIN attempts. Terminal locked for ${lockoutSec}s.`);
+      // Success: stash PIN for this session (memory-only) and log in
+      saveStoredLockout({ attempts: 0, lockedUntil: 0 });
+      setSessionPin(fullPin);
+      onLogin(pickedUser, fullPin);
+    } catch (e) {
+      console.warn("[kado-cafe] verifyStaffPinRpc error, checking fallback:", e);
+      // Graceful offline fallback if server RPC cannot be reached
+      const isMatch = await verifyPin(fullPin, String(pickedUser?.pin || ""));
+      if (isMatch) {
+        saveStoredLockout({ attempts: 0, lockedUntil: 0 });
+        setSessionPin(fullPin);
+        onLogin(pickedUser, fullPin);
       } else {
-        saveStoredLockout({ attempts: nextAttempts, lockedUntil: 0 });
-        const remainingAttempts = 3 - nextAttempts;
-        setError(`Wrong PIN (${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} remaining before lockout)`);
+        setError("Authentication service unavailable. Check connection.");
+        setPin("");
       }
-      setPin("");
     }
   };
 

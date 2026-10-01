@@ -23,7 +23,7 @@ const SettingsPanel = lazy(() => import("../views/SettingsPanel.jsx"));
 const SettingsView = lazy(() => import("../views/SettingsView.jsx"));
 const TableQRModal = lazy(() => import("../views/TableQRModal.jsx"));
 
-import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth, mirrorOrderToLedger, fetchOrderHistoryFromLedger } from "../lib/storage.js";
+import { getState, setState, subscribeToChanges, isCloudEnabled, LS_KEY, getSupabaseClient, checkConnectionHealth, mirrorOrderToLedger, fetchOrderHistoryFromLedger, setSessionPin, clearSessionPin } from "../lib/storage.js";
 import { defaultState, ROLE_TABS } from "../data/defaults.js";
 import { saveSession, loadSession, clearSession, saveUIState, loadUIState } from "../lib/session.js";
 import { snapshotStatuses } from "../state/snapshot.js";
@@ -114,15 +114,6 @@ export default function StaffApp() {
         const json = await getState();
         const next = json ? { ...defaultState(), ...JSON.parse(json) } : defaultState();
 
-        // Cold-boot hydration: fresh device pulls history from pos_orders
-        if ((next.orderHistory || []).length === 0) {
-          const ledgerOrders = await fetchOrderHistoryFromLedger(250);
-          if (ledgerOrders.length > 0) {
-            next.orderHistory = ledgerOrders;
-            skipNextSave.current = true; // hydration alone must not trigger a cloud write
-          }
-        }
-
         // Snapshot current kitchen statuses so we don't fire a toast for already-existing orders
         prevKitchenStatuses.current = snapshotStatuses(next);
         setStateRaw(next);
@@ -143,6 +134,8 @@ export default function StaffApp() {
           if (localSess && (localSess.id || localSess.pin)) {
             const activeEmp = empRoster.find(e => (localSess.id && e.id === localSess.id) || (localSess.pin && e.pin === localSess.pin));
             if (activeEmp && activeEmp.status !== "disabled" && activeEmp.status !== "Inactive") {
+              const effectivePin = localSess.pin || activeEmp.pin;
+              if (effectivePin) setSessionPin(effectivePin);
               setCurrentUser({
                 id: activeEmp.id,
                 name: activeEmp.name,
@@ -152,9 +145,18 @@ export default function StaffApp() {
                 isCloud: true,
                 organization_id: authData.organization_id || "00000000-0000-0000-0000-000000000001",
               });
+              if ((next.orderHistory || []).length === 0) {
+                const ledgerOrders = await fetchOrderHistoryFromLedger(250);
+                if (ledgerOrders.length > 0) {
+                  next.orderHistory = ledgerOrders;
+                  skipNextSave.current = true;
+                  setStateRaw((prev) => prev ? { ...prev, orderHistory: ledgerOrders } : prev);
+                }
+              }
             } else {
               setCurrentUser(null);
               clearSession();
+              clearSessionPin();
             }
           } else {
             // Fresh boot or locked terminal: stay locked on PIN selection screen with cloud active
@@ -483,13 +485,16 @@ export default function StaffApp() {
           users={loginUsers}
           hasCloudSession={Boolean(cloudSession?.user)}
           cloudUser={cloudDisplayName}
-          onLogin={(u) => {
+          onLogin={async (u, pinEntered) => {
             // Authoritative employee lookup from state.employees
             const emp = (state.employees || []).find(e => (e.id && e.id === u.id) || (e.pin && e.pin === u.pin));
             if (emp && (emp.status === "disabled" || emp.status === "Inactive")) {
               toaster.push("Account Disabled. Please contact the Owner.", "rush");
               return;
             }
+
+            const effectivePin = pinEntered || u.pin || emp?.pin;
+            if (effectivePin) setSessionPin(effectivePin);
 
             // Always construct user payload from authoritative state.employees record
             const authenticatedUser = emp ? {
@@ -503,6 +508,16 @@ export default function StaffApp() {
             } : { ...u, isCloud: true };
 
             setCurrentUser(authenticatedUser);
+
+            // Phase 6 cold ledger hydration: with sessionPin now set, hydrate if local orderHistory is empty
+            if ((state.orderHistory || []).length === 0) {
+              const ledgerOrders = await fetchOrderHistoryFromLedger(250);
+              if (ledgerOrders.length > 0) {
+                skipNextSave.current = true;
+                setStateRaw((prev) => prev ? { ...prev, orderHistory: ledgerOrders } : prev);
+              }
+            }
+
             // Record login activity
             update((s) => actions.recordActivityLog(s, {
               employeeName: authenticatedUser.name,
@@ -637,6 +652,7 @@ export default function StaffApp() {
     await logoutUser(supabase);
     setCloudSession(null);
     clearSession();
+    clearSessionPin();
     saveUIState({ tab, openTableId: null, soundEnabled });
     setOpenTableId(null);
     setCurrentUser(null);
@@ -644,6 +660,7 @@ export default function StaffApp() {
 
   const lockShift = () => {
     // Quick lock to return to PIN selection screen
+    clearSessionPin();
     setCurrentUser(null);
     saveUIState({ tab, openTableId: null, soundEnabled });
     setOpenTableId(null);

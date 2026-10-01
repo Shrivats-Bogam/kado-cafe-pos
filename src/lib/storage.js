@@ -54,6 +54,12 @@ let useSupabase = false;
 let lastFetched = ""; // remember remote json so trivial saves can skip the round-trip
 let writeQueue = Promise.resolve();
 
+// === Phase 6: session staff PIN (memory-only, never persisted) ===
+let sessionPin = null;
+export function setSessionPin(pin) { sessionPin = pin || null; }
+export function clearSessionPin()  { sessionPin = null; }
+export function hasSessionPin()    { return Boolean(sessionPin); }
+
 if (
   supabaseUrl &&
   supabaseAnonKey &&
@@ -367,6 +373,7 @@ export function setState(jsonString) {
       const { error: rpcErr } = await supabase.rpc("upsert_cafe_state", {
         p_cafe_id: CAFE_ID,
         p_data: finalObj,
+        p_pin: sessionPin,               // ← Phase 6: PIN-gated write
       });
 
       if (rpcErr) {
@@ -502,10 +509,29 @@ function rowToOrderRecord(r) {
 // Fire-and-forget, idempotent (safe to call twice — e.g. StrictMode double-invoke)
 export async function mirrorOrderToLedger(orderRecord) {
   if (IS_E2E || !useSupabase || !supabase || !orderRecord?.id) return;
+  if (!sessionPin) { console.warn("[kado-cafe] mirror skipped: no session PIN"); return; }
   try {
-    const { error } = await supabase
-      .from("pos_orders")
-      .upsert(orderRecordToRow(orderRecord), { onConflict: "id" });
+    const { error } = await supabase.rpc("record_paid_order", {
+      p_cafe_id: CAFE_ID,
+      p_pin: sessionPin,
+      p_order: {
+        id: orderRecord.id,
+        source: orderRecord.source || null,
+        customerName: orderRecord.customerName || null,
+        customerId: orderRecord.customerId || null,
+        items: orderRecord.items || [],
+        subtotal: orderRecord.subtotal ?? 0,
+        discount: orderRecord.discount ?? 0,
+        gst: orderRecord.gst ?? 0,
+        grandTotal: orderRecord.grandTotal ?? 0,
+        pointsRedeemed: orderRecord.pointsRedeemed ?? 0,
+        paymentMode: orderRecord.paymentMode || null,
+        status: orderRecord.status || "Paid",
+        ledgerId: orderRecord.ledgerId || null,
+        paidAt: orderRecord.paidAt || null,
+        createdAt: orderRecord.createdAt || new Date().toISOString(),
+      },
+    });
     if (error) console.warn("[kado-cafe] pos_orders mirror failed:", error);
   } catch (e) {
     console.warn("[kado-cafe] pos_orders mirror failed:", e);
@@ -514,16 +540,42 @@ export async function mirrorOrderToLedger(orderRecord) {
 
 export async function fetchOrderHistoryFromLedger(limit = 250) {
   if (IS_E2E || !useSupabase || !supabase) return [];
+  if (!sessionPin) { console.warn("[kado-cafe] hydration skipped: no session PIN"); return []; }
   try {
-    const { data, error } = await supabase
-      .from("pos_orders")
-      .select("*")
-      .eq("organization_id", CAFE_ID)
-      .order("created_at", { ascending: false })
-      .limit(limit);
+    const { data, error } = await supabase.rpc("get_order_history", {
+      p_cafe_id: CAFE_ID,
+      p_pin: sessionPin,
+      p_limit: limit,
+    });
     if (error) { console.warn("[kado-cafe] ledger hydration failed:", error); return []; }
-    return (data || []).map(rowToOrderRecord).reverse(); // oldest→newest, matches append order
+    return (data || []).map(rowToOrderRecord).reverse(); // oldest→newest
   } catch { return []; }
+}
+
+export async function guestPlaceOrder(tableId, items, notes = "", customer = "Guest") {
+  if (!useSupabase || !supabase) throw new Error("Supabase unavailable");
+  const { data, error } = await supabase.rpc("guest_place_order", {
+    p_cafe_id: CAFE_ID,
+    p_table_id: tableId,
+    p_items: items,
+    p_notes: notes,
+    p_customer: customer,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function verifyStaffPinRpc(employeeId, pin) {
+  if (!useSupabase || !supabase) throw new Error("Supabase unavailable");
+  const { data, error } = await supabase.rpc("verify_staff_pin", {
+    p_cafe_id: CAFE_ID,
+    p_employee_id: employeeId,
+    p_pin: pin,
+  });
+  if (error) throw error;
+  // data is an array of rows: [{ ok, role, locked }]
+  const row = Array.isArray(data) ? data[0] : data;
+  return { ok: Boolean(row?.ok), role: row?.role || null, locked: Boolean(row?.locked) };
 }
 
 

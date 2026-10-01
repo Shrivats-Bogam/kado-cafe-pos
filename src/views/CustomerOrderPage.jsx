@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Check, AlertCircle } from "lucide-react";
-import { getState, setState } from "../lib/storage.js";
+import { getState, setState, isCloudEnabled, guestPlaceOrder } from "../lib/storage.js";
 import { defaultState } from "../data/defaults.js";
 import { TRANSLATIONS } from "../components/CustomerTranslations.js";
 
@@ -53,6 +53,21 @@ export default function CustomerOrderPage({ tableId }) {
     if (!cart.length || !table) return;
 
     try {
+      if (isCloudEnabled) {
+        const itemsPayload = cart.map((c) => ({
+          menuItemId: c.menuItemId,
+          qty: c.qty,
+          notes: c.notes || "",
+          name: c.name,
+          price: c.price,
+        }));
+        await guestPlaceOrder(tableId, itemsPayload, "", "Guest");
+        setCart([]);
+        setSuccessToast("Order sent to Kitchen!");
+        setTimeout(() => setSuccessToast(""), 3000);
+        return;
+      }
+
       const json = await getState();
       const fresh = json ? { ...defaultState(), ...JSON.parse(json) } : snapshot;
       const targetTable = fresh.tables.find((t) => t.id === tableId);
@@ -104,7 +119,11 @@ export default function CustomerOrderPage({ tableId }) {
       setSuccessToast("Order sent to Kitchen!");
       setTimeout(() => setSuccessToast(""), 3000);
     } catch (err) {
-      setError("Couldn't send order to kitchen. Please inform staff.");
+      if (err?.message?.includes("wait before ordering again")) {
+        setError("Please wait a few seconds before placing another order.");
+      } else {
+        setError("Couldn't send order to kitchen. Please inform staff.");
+      }
     }
   };
 
