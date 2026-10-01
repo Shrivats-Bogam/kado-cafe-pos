@@ -254,3 +254,28 @@ grant execute on function public.upsert_cafe_state(text,jsonb,text)           to
 grant execute on function public.record_paid_order(text,text,jsonb)           to anon, authenticated;
 grant execute on function public.get_order_history(text,text,int)             to anon, authenticated;
 grant execute on function public.guest_place_order(text,text,jsonb,text,text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Section H: Scrub existing plaintext PINs from cafe_state.data
+-- ---------------------------------------------------------------------
+update public.cafe_state
+set data = jsonb_set(
+  case 
+    when data ? 'users' then
+      jsonb_set(
+        data,
+        '{users}',
+        coalesce((
+          select jsonb_agg(u - 'pin')
+          from jsonb_array_elements(data->'users') u
+        ), '[]'::jsonb)
+      )
+    else data
+  end,
+  '{employees}',
+  coalesce((
+    select jsonb_agg(e - 'pin')
+    from jsonb_array_elements(data->'employees') e
+  ), '[]'::jsonb)
+)
+where cafe_id = 'kado-cafe' and data ? 'employees';
