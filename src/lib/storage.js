@@ -728,7 +728,7 @@ export async function fetchActivityLogsFromLedger({ module, employee, from, to, 
       action: row.action,
       module: row.module,
       details: row.details,
-      timestamp: row.timestamp,
+      timestamp: row.created_at || row.timestamp,
     }));
   } catch {
     return [];

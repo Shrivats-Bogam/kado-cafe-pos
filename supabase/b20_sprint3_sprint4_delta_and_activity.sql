@@ -119,7 +119,7 @@ returns table(
   action text,
   module text,
   details text,
-  timestamp timestamptz
+  created_at timestamptz
 )
 language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -144,7 +144,7 @@ begin
       l.action,
       l.module,
       l.details,
-      l.created_at as timestamp
+      l.created_at
     from public.pos_activity_log l
    where l.cafe_id = p_cafe_id
      and (p_module is null or p_module = '' or l.module = p_module)
