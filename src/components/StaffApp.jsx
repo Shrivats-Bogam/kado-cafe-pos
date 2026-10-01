@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   Coffee, LayoutDashboard, ChefHat, Package, Menu as MenuIcon,
-  Users, Sparkles, BarChart3, Settings, LogOut, Lock, Calculator as CalculatorIcon, ShieldCheck, KeyRound
+  Users, Sparkles, BarChart3, Settings, LogOut, Lock, Calculator as CalculatorIcon, ShieldCheck, KeyRound, ScrollText
 } from "lucide-react";
 
 import LoginScreen from "../components/LoginScreen.jsx";
@@ -18,6 +18,7 @@ const MenuManageView = lazy(() => import("../views/MenuManageView.jsx"));
 const CustomersView = lazy(() => import("../views/CustomersView.jsx"));
 const ReportsView = lazy(() => import("../views/ReportsView.jsx"));
 const EmployeesView = lazy(() => import("../views/EmployeesView.jsx"));
+const ActivityLogView = lazy(() => import("../views/ActivityLogView.jsx"));
 const InventoryView = lazy(() => import("../views/InventoryView.jsx"));
 const AIInsightsView = lazy(() => import("../views/AIInsightsView.jsx"));
 const SettingsPanel = lazy(() => import("../views/SettingsPanel.jsx"));
@@ -47,6 +48,7 @@ const TABS = [
   { id: "insights", label: "Insights", icon: Sparkles },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "employees", label: "Employees", icon: ShieldCheck },
+  { id: "activity", label: "Activity", icon: ScrollText },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -907,6 +909,12 @@ export default function StaffApp() {
                 <EmployeesView
                   state={state}
                   dispatch={(actionName, ...args) => update((s) => actions[actionName](s, ...args))}
+                  currentUser={currentUser}
+                />
+              )}
+              {tab === "activity" && currentUser?.role === "Owner" && (
+                <ActivityLogView
+                  state={state}
                   currentUser={currentUser}
                 />
               )}

@@ -628,5 +628,24 @@ export async function adminRemoveEmployeePin(employeeId) {
   if (error) throw error;
 }
 
+// === ACTIVITY LOG SEAM (v1: local. v2: swap internals to get_activity_log RPC — UI never changes) ===
+export function fetchActivityLogs(state, { module, employee, from, to, search } = {}) {
+  let logs = state?.activityLogs || [];
+  if (module)   logs = logs.filter((l) => l.module === module);
+  if (employee) logs = logs.filter((l) => l.employeeName === employee);
+  if (from)     logs = logs.filter((l) => l.timestamp >= from);
+  if (to)       logs = logs.filter((l) => l.timestamp <= to);
+  if (search) {
+    const q = search.toLowerCase();
+    logs = logs.filter((l) =>
+      (l.action || "").toLowerCase().includes(q) ||
+      (l.details || "").toLowerCase().includes(q) ||
+      (l.employeeName || "").toLowerCase().includes(q)
+    );
+  }
+  return logs; // already newest-first from recordActivityLog
+}
+
+
 
 

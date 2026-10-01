@@ -21,6 +21,9 @@ import {
   calculateMembershipTier 
 } from "../lib/loyalty.js";
 import { makeId } from "../lib/id.js";
+import { defaultState } from "../data/defaults.js";
+
+export const MAX_ACTIVITY_LOGS = 500;
 
 // --- Tables ---------------------------------------------------------------
 
@@ -685,7 +688,7 @@ export function recalculateCustomerLoyalty(state, opts = {}) {
   return {
     ...state,
     customers: finalCustomers,
-    activityLogs: logs.slice(0, 100),
+    activityLogs: logs.slice(0, MAX_ACTIVITY_LOGS),
   };
 }
 
@@ -714,7 +717,7 @@ export function expireCustomerPoints(state, opts = {}) {
   return {
     ...state,
     customers,
-    activityLogs: logs.slice(0, 100),
+    activityLogs: logs.slice(0, MAX_ACTIVITY_LOGS),
   };
 }
 
@@ -1428,7 +1431,7 @@ export function recordActivityLog(state, { employeeName, action, module }) {
 
   return {
     ...state,
-    activityLogs: [newLog, ...(state.activityLogs || []).slice(0, 100)] // Keep max 100 logs
+    activityLogs: [newLog, ...(state.activityLogs || [])].slice(0, MAX_ACTIVITY_LOGS)
   };
 }
 
@@ -1505,7 +1508,7 @@ export function updateSettings(state, partialSettings, employeeName = "Owner") {
     ...state,
     cafeName: updatedSettings.businessName || state.cafeName,
     settings: updatedSettings,
-    activityLogs: [logEntry, ...(state.activityLogs || [])]
+    activityLogs: [logEntry, ...(state.activityLogs || [])].slice(0, MAX_ACTIVITY_LOGS)
   };
 }
 
@@ -1523,7 +1526,7 @@ export function restoreBackup(state, restoredPayload, employeeName = "Owner") {
   return {
     ...defaultState(),
     ...restoredData,
-    activityLogs: [logEntry, ...(restoredData.activityLogs || [])]
+    activityLogs: [logEntry, ...(restoredData.activityLogs || [])].slice(0, MAX_ACTIVITY_LOGS)
   };
 }
 
@@ -1609,7 +1612,7 @@ export function refundOrder(state, orderId, refundAmount, reason = "Customer ref
 export function archiveHistoricalData(state, options = {}) {
   const keepOrders = options.keepOrders || 300;
   const keepLogs = options.keepLogs || 300;
-  const keepActivity = options.keepActivity || 100;
+  const keepActivity = options.keepActivity || MAX_ACTIVITY_LOGS;
 
   const currentHistory = state.orderHistory || [];
   const currentInvLogs = state.inventoryLogs || [];
