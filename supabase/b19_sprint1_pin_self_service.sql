@@ -15,7 +15,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   r record;
 begin
-  if p_new_pin !~ '^\d{4,6}$' then
+  if p_new_pin !~ '^[0-9]{4,6}$' then
     raise exception 'PIN must be 4 to 6 digits';
   end if;
 
@@ -54,7 +54,7 @@ create or replace function public.admin_set_employee_pin(
 returns void
 language plpgsql security definer set search_path = public, extensions as $$
 begin
-  if p_new_pin !~ '^\d{4,6}$' then
+  if p_new_pin !~ '^[0-9]{4,6}$' then
     raise exception 'PIN must be 4 to 6 digits';
   end if;
 
